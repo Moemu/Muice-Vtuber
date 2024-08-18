@@ -1,7 +1,7 @@
 from blivedm import blivedm
 from blivedm.blivedm.models import open_live as open_models
 from blivedm.blivedm.models import web as web_models
-import logging,asyncio,threading
+import logging,asyncio,threading,time
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +66,12 @@ class Danmu:
         finally:
             self.loop.close()
 
-    async def start_client(self):
+    def start_client(self):
         client_thread = threading.Thread(target=self.__start_client)
         client_thread.start()
         self.status.change_blivedm_status(1)
 
-    async def close_client(self):
+    def close_client(self):
         self.__client_process = False
-        await asyncio.sleep(1)
+        time.sleep(1)
         self.status.change_blivedm_status(0)

@@ -69,8 +69,7 @@ class Action:
         if status.blivedm_status:
             ui.notify('不能重复连接！',type='negative')
             return False
-        self.blivedmThread = threading.Thread(target = lambda: asyncio.run(danmu.start_client()))
-        self.blivedmThread.start()
+        danmu.start_client()
         app.on_exception(lambda exception: ui.notify('连接失败',type='negative'))
         # asyncio.create_task(danmu.start_client(config))
 
@@ -78,9 +77,7 @@ class Action:
         if not status.blivedm_status:
             ui.notify('尚未连接！',type='negative')
             return False
-        threading.Thread(target = lambda: asyncio.run(danmu.close_client())).start()
-        logger.debug('已调用stop_and_close')
-        self.blivedmThread.join()
+        danmu.close_client()
 
     def chat_with_LLM(self,prompt):
         if status.LLM_status:
