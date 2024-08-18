@@ -1,28 +1,11 @@
-from nicegui import ui,app
+from nicegui import ui
 from config import Config
-import importlib,threading,asyncio,logging
+import importlib,logging
 from danmu import Danmu
 
 ui.dark_mode().enable()
 config = Config()
 logger = logging.getLogger(__name__)
-
-class MyThread(threading.Thread):
-    def __init__(self, *args, **kwargs):
-        super(MyThread, self).__init__(*args, **kwargs)
-        self._exception = None
-
-    def run(self):
-        try:
-            if self._target:
-                self._target(*self._args, **self._kwargs)
-        except Exception as e:
-            self._exception = e
-
-    def join(self, *args, **kwargs):
-        super(MyThread, self).join(*args, **kwargs)
-        if self._exception:
-            raise self._exception
 
 class Status:
     def __init__(self) -> None:
@@ -70,8 +53,6 @@ class Action:
             ui.notify('不能重复连接！',type='negative')
             return False
         danmu.start_client()
-        app.on_exception(lambda exception: ui.notify('连接失败',type='negative'))
-        # asyncio.create_task(danmu.start_client(config))
 
     async def disconnect_to_blivedm(self):
         if not status.blivedm_status:
