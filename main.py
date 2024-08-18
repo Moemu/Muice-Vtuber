@@ -1,12 +1,29 @@
-from ui import UI
+from event import EventHandler,WebUIEventHandler
+from tts import EdgeTTS
+from llm import LLMModule
+from danmu import Danmu,DanmuHandler
+from config import Config
+from ui import WebUI
 import logging
 
 logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-ui = UI()
+
+config = Config()
+tts = EdgeTTS()
+ui = WebUI()
+llm = LLMModule()
+
+EventHandler = EventHandler(llm,tts,ui)
+WebUIEventHandler = WebUIEventHandler(config,llm)
+DanmuHandler = DanmuHandler(EventHandler)
+
+danmu = Danmu(config,DanmuHandler)
+
+ui.action = WebUIEventHandler
+danmu.webui = ui
+WebUIEventHandler.webui = ui
+WebUIEventHandler.danmu = danmu
 
 if __name__ in {"__main__", "__mp_main__"}:
-    # asyncio.run(start_danmu())
-    # model = importlib.import_module(f"llm.{config.LLM_MODEL_LOADER}")
-    # model = model.llm(config.LLM_MODEL_PATH, config.LLM_ADAPTER_PATH)
     ui.start()
