@@ -4,6 +4,7 @@ import asyncio
 import shlex
 import pyaudio
 import wave
+import requests
 
 async def run_command(command: str, log: object, cwd: str = os.path.dirname(os.path.abspath(__file__))) -> None:
     command = command.replace('python3', sys.executable)
@@ -53,3 +54,23 @@ def play_audio(file_path:str = './log/output.wav'):
     stream.close()
     wf.close()
     p.terminate()
+
+class Captions:
+    def __init__(self) -> None:
+        self.captions_server = 'http://127.0.0.1:5500/api/sendmessage'
+        self.is_connecting = False
+
+    def connect(self) -> bool:
+        try:
+            requests.get(self.captions_server)
+            self.is_connecting = True
+            return True
+        except:
+            return False
+        
+    def post(self, message:str, username:str, userface:str, respond:str) -> bool:
+        data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+        result = requests.post(self.captions_server, json = data)
+        if result.status_code == 200:
+            print('success...')
+            return True

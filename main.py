@@ -4,6 +4,8 @@ from llm import LLMModule
 from danmu import Danmu,DanmuHandler
 from config import Config
 from ui import WebUI
+from utils import Captions
+from test import Test
 import logging
 
 logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.DEBUG)
@@ -13,10 +15,12 @@ config = Config()
 tts = EdgeTTS()
 ui = WebUI()
 llm = LLMModule()
+captions = Captions()
 
-EventHandler = EventHandler(llm,tts,ui)
-WebUIEventHandler = WebUIEventHandler(config,llm)
+EventHandler = EventHandler(llm,tts,captions,ui)
+WebUIEventHandler = WebUIEventHandler(config,llm,captions)
 DanmuHandler = DanmuHandler(EventHandler)
+test = Test(EventHandler)
 
 danmu = Danmu(config,DanmuHandler)
 
@@ -24,6 +28,7 @@ ui.action = WebUIEventHandler
 danmu.webui = ui
 WebUIEventHandler.webui = ui
 WebUIEventHandler.danmu = danmu
+WebUIEventHandler.test = test
 
 if __name__ in {"__main__", "__mp_main__"}:
     ui.start()

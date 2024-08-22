@@ -7,9 +7,23 @@ config = Config()
 logger = logging.getLogger(__name__)
 
 class WebUI:
+
+    class label:
+        llm:ui.label = None
+        blivedm:ui.label = None
+        captions:ui.label = None
+
+    class icon:
+        llm:ui.icon = None
+        blivedm:ui.icon = None
+        captions:ui.label = None
+
+    class status:
+        llm:int = 0
+        blivedm:int = 0
+        captions:int = 0
+
     def __init__(self,WebUIEventHandler = None) -> None:
-        self.LLM_status = 0
-        self.blivedm_status = 0
         self.ui_danmu = None
         self.action = WebUIEventHandler
         self.ui = ui
@@ -28,12 +42,16 @@ class WebUI:
                         ui.label('运行状态').style('font-size: large')
                         with ui.row().style('line-height: 1'):
                             ui.label('LLM状态')
-                            self.iconLLM = ui.icon('circle',color='red')
-                            self.llm = ui.label('未连接')
+                            self.icon.llm = ui.icon('circle',color='red')
+                            self.label.llm = ui.label('未连接')
                         with ui.row().style('line-height: 1'):
                             ui.label('Blivedm状态')
-                            self.iconblivedm = ui.icon('circle',color='red')
-                            self.blivedm = ui.label('未连接')
+                            self.icon.blivedm = ui.icon('circle',color='red')
+                            self.label.blivedm = ui.label('未连接')
+                        with ui.row().style('line-height: 1'):
+                            ui.label('字幕组件状态')
+                            self.icon.captions = ui.icon('circle',color='red')
+                            self.label.captions = ui.label('未连接')
 
                 with ui.card().classes('w-50'):
                     ui.label('LLM操作台').style('font-size: large')
@@ -43,7 +61,11 @@ class WebUI:
                     ui.label('弹幕控制台').style('font-size: large')
                     ui.button('连接到blivedm',on_click=self.action.connect_to_blivedm)
                     ui.button('取消连接',on_click=self.action.disconnect_to_blivedm)
-                        
+                    ui.button('创建一个测试弹幕事件',on_click=self.action.CreateATestDanmuEvent)
+
+                with ui.card().classes('w-50'):
+                    ui.label('字幕组件控制台').style('font-size: large')
+                    ui.button('连接到字幕组件',on_click=self.action.connect_to_captions)                       
             
             with ui.tab_panel(tab_danmu):
                 self.ui_danmu =ui.log().classes("w-full overflow-auto").style("height: 50rem")
@@ -72,20 +94,30 @@ class WebUI:
 
     def change_LLM_status(self, status):
         if status:
-            self.iconLLM.classes('text-green')
-            self.llm.set_text('已连接')
-            self.LLM_status = 1
+            self.icon.llm.classes('text-green')
+            self.label.llm.set_text('已连接')
+            self.status.llm = 1
         else:
-            self.iconLLM.classes('text-red')
-            self.llm.set_text('未连接')
-            self.LLM_status = 0
+            self.icon.llm.classes('text-red')
+            self.label.llm.set_text('未连接')
+            self.status.llm = 0
 
     def change_blivedm_status(self, status):
         if status:
-            self.iconblivedm.classes('text-green')
-            self.blivedm.set_text('已连接')
-            self.blivedm_status = 1
+            self.icon.blivedm.classes('text-green')
+            self.label.blivedm.set_text('已连接')
+            self.status.blivedm = 1
         else:
-            self.iconblivedm.classes(remove = 'text-green', replace = 'text-red')
-            self.blivedm.set_text('未连接')
-            self.blivedm_status = 0
+            self.icon.blivedm.classes(remove = 'text-green', replace = 'text-red')
+            self.label.blivedm.set_text('未连接')
+            self.status.blivedm = 0
+
+    def change_captions_status(self, status):
+        if status:
+            self.icon.captions.classes('text-green')
+            self.label.captions.set_text('已连接')
+            self.status.captions = 1
+        else:
+            self.icon.captions.classes(remove = 'text-green', replace = 'text-red')
+            self.label.captions.set_text('未连接')
+            self.status.captions = 0
