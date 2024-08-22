@@ -1,3 +1,6 @@
 [submodule "blivedm"]
 	path = blivedm
 	url = git://github.com/xfgryujk/blivedm.git
+[submodule "captions"]
+	path = captions
+	url = git://github.com/Moemu/Muice-Subtitle.git
