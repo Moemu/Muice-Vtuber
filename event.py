@@ -3,6 +3,7 @@ from ui import WebUI
 from llm import LLMModule, BasicModel
 from tts import EdgeTTS
 from utils import play_audio,Captions
+from sqlite import Database
 from config import Config
 
 class WebUIEventHandler:
@@ -60,10 +61,11 @@ class WebUIEventHandler:
         self.test.CreateADanmuEvent()
 
 class EventHandler:
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, ui:WebUI = None) -> None:
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, ui:WebUI = None) -> None:
         self.llm = llm
         self.tts = tts
         self.captions = captions
+        self.database = database
         self.ui = ui
 
     def DanmuEvent(self, danmu:DanmakuMessage):
@@ -75,7 +77,9 @@ class EventHandler:
         model = self.llm.model
         if not model.is_running and not self.captions.is_connecting:
             return
-        respond = model.ask(message, history=[])
+        history = self.database.get_history()
+        respond = model.ask(message, history=history)
+        self.database.add_item(username, danmu.open_id, message, respond)
         self.tts.speak(respond)
         self.captions.post(message, username, userface, respond)
         play_audio()
