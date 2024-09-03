@@ -2,10 +2,10 @@ import sqlite3,os,time
 
 class Database:
     def __init__(self) -> None:
+        self.connection = sqlite3.connect('database.db')
+        self.cursor = self.connection.cursor()
         if not os.path.isfile('database.db'):
             self.__create_database()
-            self.connection = sqlite3.connect('database.db')
-            self.cursor = self.connection.cursor()
 
     def __create_database(self) -> None:
         self.cursor.execute('''CREATE TABLE CHAT(
