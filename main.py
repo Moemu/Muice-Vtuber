@@ -6,7 +6,6 @@ from config import Config
 from ui import WebUI
 from utils import Captions
 from test import Test
-from sqlite import Database
 import logging
 
 logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.DEBUG)
@@ -17,9 +16,8 @@ tts = EdgeTTS()
 ui = WebUI()
 llm = LLMModule()
 captions = Captions()
-database = Database()
 
-EventHandler = EventHandler(llm,tts,captions,database,ui)
+EventHandler = EventHandler(llm,tts,captions,ui)
 WebUIEventHandler = WebUIEventHandler(config,llm,captions)
 DanmuHandler = DanmuHandler(EventHandler)
 test = Test(EventHandler)
