@@ -4,18 +4,101 @@ from llm import LLMModule, BasicModel
 from tts import EdgeTTS
 from utils import play_audio,Captions
 from config import Config
+from sqlite import Database
+import queue,threading
+
+class BasicTask:
+    '''基本任务'''
+    def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database) -> None:
+        self.model = model
+        self.tts = tts
+        self.captions = captions
+        self.database = database
+
+    def run():
+        '''基本任务运行入口'''
+        pass
+
+class DanmuTask(BasicTask):
+    def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
+        super(DanmuTask, self).__init__(model,tts,captions,database)
+        self.data = data
+    
+    def run(self):
+        history = self.database.get_history()
+        respond = self.model.ask(self.data['message'], history=history)
+        self.database.add_item(self.data['username'], self.data['userid'], self.data['message'], respond)
+        self.tts.speak(respond)
+        self.captions.post(self.data['message'], self.data['username'], self.data['userface'], respond)
+        play_audio()
+
+class EventQueue:
+    def __init__(self) -> None:
+        self.queue = queue.PriorityQueue(maxsize=5)
+        self.threading = threading.Thread(target=self.__run)
+        self.is_running = False
+        self.task_index = 1
+
+    def __run(self):
+        while self.is_running:
+            task_class = self.queue.get()[1]
+            task_class.run()
+   
+    def put(self, priority:int, event:BasicTask):
+        priority += self.task_index
+        self.task_index += 1
+        self.queue.put((priority,event))
+
+    def start(self) -> bool:
+        if not self.threading.is_alive():
+            self.is_running = True
+            self.threading.start()
+        return self.is_running
+        
+    def stop(self):
+        self.is_running = False
+        self.threading.join()
 
 class WebUIEventHandler:
-    def __init__(self, config: Config, llm:LLMModule, captions:Captions, webui = None, danmu = None, test = None) -> None:
+    def __init__(self, config: Config, llm:LLMModule, captions:Captions, eventqueue:EventQueue, webui = None, danmu = None, test = None) -> None:
         self.config = config
         self.webui = webui
         self.danmu = danmu
         self.llm = llm
         self.captions = captions
+        self.queue = eventqueue
         self.test = test
         self.model:BasicModel = None
         self.chat_history = []
 
+    def start_all(self):
+        if self.webui.status.all:
+            self.webui.ui.notify('无法启动：已启动了一个进程',type='negative')
+            return False
+        if self.webui.status.llm and self.webui.status.blivedm and self.webui.status.captions:
+            if self.queue.start():
+                self.webui.change_all_status(1)
+        else:
+            self.webui.ui.notify('无法启动：必要的组件未全部连接',type='negative')
+
+    def stop_all(self):
+        if not self.webui.status.all:
+            self.webui.ui.notify('无法关闭：进程未在运行中',type='negative')
+            return False
+        self.queue.stop()
+        self.webui.change_all_status(0)
+
+    def connect_to_LLM(self):
+        if self.webui.status.llm:
+            self.webui.ui.notify('不能重复连接！',type='negative')
+            return False
+        model = self.llm.LoadLLMModule(self.config.LLM_MODEL_LOADER, self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH)
+        if model:
+            self.model = model
+            self.webui.change_LLM_status(1)
+        else:
+            self.webui.ui.notify('无法连接至LLM',type='negative')
+    
     def connect_to_LLM(self):
         if self.webui.status.llm:
             self.webui.ui.notify('不能重复连接！',type='negative')
@@ -60,10 +143,12 @@ class WebUIEventHandler:
         self.test.CreateADanmuEvent()
 
 class EventHandler:
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, ui:WebUI = None) -> None:
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, eventquene:EventQueue, ui:WebUI = None) -> None:
         self.llm = llm
         self.tts = tts
         self.captions = captions
+        self.database = database
+        self.quene = eventquene
         self.ui = ui
 
     def DanmuEvent(self, danmu:DanmakuMessage):
@@ -72,10 +157,10 @@ class EventHandler:
         message = danmu.msg
         username = danmu.uname
         userface = danmu.uface
+        userid = danmu.open_id
         model = self.llm.model
         if not model.is_running and not self.captions.is_connecting:
             return
-        respond = model.ask(message, history=[])
-        self.tts.speak(respond)
-        self.captions.post(message, username, userface, respond)
-        play_audio()
+        data = {'message':message,'username':username,'userface':userface,'userid':userid}
+        task = DanmuTask(model,self.tts,self.captions,self.database,data)
+        self.quene.put(1,task)

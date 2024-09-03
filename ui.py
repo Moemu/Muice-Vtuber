@@ -9,16 +9,19 @@ logger = logging.getLogger(__name__)
 class WebUI:
 
     class label:
+        all:ui.label = None
         llm:ui.label = None
         blivedm:ui.label = None
         captions:ui.label = None
 
     class icon:
+        all:ui.label = None
         llm:ui.icon = None
         blivedm:ui.icon = None
         captions:ui.label = None
 
     class status:
+        all:int = 0
         llm:int = 0
         blivedm:int = 0
         captions:int = 0
@@ -41,6 +44,10 @@ class WebUI:
                     with ui.card().classes('w-50'):
                         ui.label('运行状态').style('font-size: large')
                         with ui.row().style('line-height: 1'):
+                            ui.label('消息处理')
+                            self.icon.all = ui.icon('circle',color='red')
+                            self.label.all = ui.label('未运行')
+                        with ui.row().style('line-height: 1'):
                             ui.label('LLM状态')
                             self.icon.llm = ui.icon('circle',color='red')
                             self.label.llm = ui.label('未连接')
@@ -52,6 +59,11 @@ class WebUI:
                             ui.label('字幕组件状态')
                             self.icon.captions = ui.icon('circle',color='red')
                             self.label.captions = ui.label('未连接')
+
+                with ui.card().classes('w-50'):
+                    ui.label('总操作台').style('font-size: large')
+                    ui.button('开始消息处理',on_click=self.action.start_all)
+                    ui.button('终止消息处理',on_click=self.action.stop_all)    
 
                 with ui.card().classes('w-50'):
                     ui.label('LLM操作台').style('font-size: large')
@@ -91,6 +103,16 @@ class WebUI:
 
     def start(self):
         return self.__Load()
+
+    def change_all_status(self, status):
+        if status:
+            self.icon.all.classes('text-green')
+            self.label.all.set_text('正在运行')
+            self.status.all = 1
+        else:
+            self.icon.all.classes('text-red')
+            self.label.all.set_text('未运行')
+            self.status.all = 0
 
     def change_LLM_status(self, status):
         if status:
