@@ -12,7 +12,7 @@ class Database:
             ID INT PRIMARY KEY NOT NULL,
             TIME TEXT NOT NULL,
             USERNAME TEXT NOT NULL,
-            USERID INT NOT NULL,
+            USERID TEXT NOT NULL,
             DANMU TEXT NOT NULL,
             RESPOND TEXT NOT NULL);''')
         connection.commit()
@@ -28,12 +28,12 @@ class Database:
         connection.close()
         return lastest_id
     
-    def add_item(self, Username:str, Userid:int, Danmu:str, respond:str):
+    def add_item(self, Username:str, Userid:str, Danmu:str, respond:str):
         current_time = time.strftime('%Y.%m.%d %H:%M:%S')
         available_id = self.__get_lastest_id() + 1
         connection = sqlite3.connect('database.db')
         cursor = connection.cursor()
-        cursor.execute(f'''INSERT INTO CHAT VALUES ({available_id}, '{current_time}', '{Username}', {Userid}, '{Danmu}', '{respond}');''')
+        cursor.execute(f'''INSERT INTO CHAT VALUES ({available_id}, '{current_time}', '{Username}', '{Userid}', '{Danmu}', '{respond}');''')
         connection.commit()
         connection.close()
 
