@@ -68,8 +68,11 @@ class Captions:
         except:
             return False
         
-    def post(self, message:str, username:str, userface:str, respond:str) -> bool:
-        data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+    def post(self, message:str, username:str, userface:str, respond:str, leisure:bool = False) -> bool:
+        if leisure:
+            data = {'user':'', 'avatar':'', 'message':'', 'respond':respond}
+        else:
+            data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
         result = requests.post(self.captions_server, json = data)
         if result.status_code == 200:
             print('success...')

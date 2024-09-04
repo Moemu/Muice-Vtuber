@@ -1,4 +1,4 @@
-from event import EventHandler,WebUIEventHandler,EventQueue
+from event import EventHandler,WebUIEventHandler,EventQueue,LeisureTask
 from tts import EdgeTTS
 from llm import LLMModule
 from danmu import Danmu,DanmuHandler
@@ -18,7 +18,9 @@ ui = WebUI()
 llm = LLMModule()
 captions = Captions()
 database = Database()
+leisuretask = LeisureTask(llm,tts,captions,database) 
 queue = EventQueue()
+queue.leisure_task = leisuretask
 
 EventHandler = EventHandler(llm,tts,captions,database,queue,ui)
 WebUIEventHandler = WebUIEventHandler(config,llm,captions,queue)

@@ -5,12 +5,12 @@ from tts import EdgeTTS
 from utils import play_audio,Captions
 from config import Config
 from sqlite import Database
-import queue,threading
+import queue,threading,time
 
 class BasicTask:
     '''基本任务'''
-    def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database) -> None:
-        self.model = model
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database) -> None:
+        self.llm = llm
         self.tts = tts
         self.captions = captions
         self.database = database
@@ -20,30 +20,54 @@ class BasicTask:
         pass
 
 class DanmuTask(BasicTask):
-    def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
-        super(DanmuTask, self).__init__(model,tts,captions,database)
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
+        super(DanmuTask, self).__init__(llm,tts,captions,database)
         self.data = data
     
     def run(self):
         history = self.database.get_history()
-        respond = self.model.ask(self.data['message'], history=history)
+        respond = self.llm.model.ask(self.data['message'], history=history)
         self.database.add_item(self.data['username'], self.data['userid'], self.data['message'], respond)
         self.tts.speak(respond)
         self.captions.post(self.data['message'], self.data['username'], self.data['userface'], respond)
+        play_audio()
+
+class LeisureTask(BasicTask):
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database) -> None:
+        super(LeisureTask, self).__init__(llm,tts,captions,database)
+    
+    def run(self):
+        # history = self.database.get_history()
+        respond = self.llm.model.ask('（发起一个新话题）', history=[])
+        self.database.add_item('闲时任务', '0', '（发起一个新话题）', respond)
+        self.tts.speak(respond)
+        self.captions.post('', '', '', respond, leisure=True)
         play_audio()
 
 class EventQueue:
     def __init__(self) -> None:
         self.queue = queue.PriorityQueue(maxsize=5)
         self.threading = threading.Thread(target=self.__run)
+        self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
+        self.leisure_task:LeisureTask = None
         self.is_running = False
         self.task_index = 1
 
     def __run(self):
         while self.is_running:
-            task_class = self.queue.get()[1]
-            task_class.run()
-   
+            try:
+                task_class = self.queue.get_nowait()[1]
+                self.timer.cancel()
+                task_class.run()
+            except queue.Empty:
+                if not self.timer.is_alive():
+                    self.timer = threading.Timer(3, self.__create_a_leisure_task, ())
+                    self.timer.start()
+                time.sleep(0.5)
+    
+    def __create_a_leisure_task(self):
+        self.put(10, self.leisure_task)
+
     def put(self, priority:int, event:BasicTask):
         priority += self.task_index
         self.task_index += 1
@@ -52,11 +76,13 @@ class EventQueue:
     def start(self) -> bool:
         if not self.threading.is_alive():
             self.is_running = True
+            self.timer.start()
             self.threading.start()
         return self.is_running
         
     def stop(self):
         self.is_running = False
+        self.timer.cancel()
         self.threading.join()
 
 class WebUIEventHandler:
@@ -158,9 +184,8 @@ class EventHandler:
         username = danmu.uname
         userface = danmu.uface
         userid = danmu.open_id
-        model = self.llm.model
-        if not model.is_running and not self.captions.is_connecting:
+        if not self.llm.model.is_running and not self.captions.is_connecting:
             return
         data = {'message':message,'username':username,'userface':userface,'userid':userid}
-        task = DanmuTask(model,self.tts,self.captions,self.database,data)
+        task = DanmuTask(self.llm,self.tts,self.captions,self.database,data)
         self.quene.put(1,task)
