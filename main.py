@@ -1,39 +1,47 @@
-from event import EventHandler,WebUIEventHandler,EventQueue,LeisureTask
+from event import EventHandler, WebUIEventHandler, EventQueue, LeisureTask
 from tts import EdgeTTS
 from llm import LLMModule
-from danmu import Danmu,DanmuHandler
+from danmu import Danmu, DanmuHandler
 from config import Config
 from ui import WebUI
-from utils import Captions
+from utils.utils import Captions
 from test import Test
 from sqlite import Database
+from utils.logging import init_logger
 import logging
 
-logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+class App:
+    def __init__(self):
+        self.logger = init_logger(logging.DEBUG)
+        self.config = Config()
+        self.tts = EdgeTTS()
+        self.ui = WebUI()
+        self.llm = LLMModule()
+        self.captions = Captions()
+        self.database = Database()
+        self.leisuretask = LeisureTask(self.llm, self.tts, self.captions, self.database)
+        self.queue = EventQueue()
+        self.queue.leisure_task = self.leisuretask
 
-config = Config()
-tts = EdgeTTS()
-ui = WebUI()
-llm = LLMModule()
-captions = Captions()
-database = Database()
-leisuretask = LeisureTask(llm,tts,captions,database) 
-queue = EventQueue()
-queue.leisure_task = leisuretask
+        self.event_handler = EventHandler(self.llm, self.tts, self.captions, self.database, self.queue, self.ui)
+        self.web_ui_event_handler = WebUIEventHandler(self.config, self.llm, self.captions, self.queue)
+        self.danmu_handler = DanmuHandler(self.event_handler)
+        self.test = Test(self.event_handler)
 
-EventHandler = EventHandler(llm,tts,captions,database,queue,ui)
-WebUIEventHandler = WebUIEventHandler(config,llm,captions,queue)
-DanmuHandler = DanmuHandler(EventHandler)
-test = Test(EventHandler)
+        self.danmu = Danmu(self.config, self.danmu_handler)
 
-danmu = Danmu(config,DanmuHandler)
+        self.ui.action = self.web_ui_event_handler
+        self.danmu.webui = self.ui
+        self.web_ui_event_handler.webui = self.ui
+        self.web_ui_event_handler.danmu = self.danmu
+        self.web_ui_event_handler.test = self.test
 
-ui.action = WebUIEventHandler
-danmu.webui = ui
-WebUIEventHandler.webui = ui
-WebUIEventHandler.danmu = danmu
-WebUIEventHandler.test = test
+    def start(self):
+        try:
+            self.ui.start()
+        except Exception as e:
+            self.logger.error(f"Failed to start the application: {e}")
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.start()
+    app = App()
+    app.start()

@@ -2,10 +2,13 @@ from blivedm.blivedm.models.open_live import DanmakuMessage
 from ui import WebUI
 from llm import LLMModule, BasicModel
 from tts import EdgeTTS
-from utils import play_audio,Captions
+from utils.utils import play_audio,Captions
 from config import Config
 from sqlite import Database
 import queue,threading,time
+
+import logging
+logger = logging.getLogger('Muice.Event')
 
 class BasicTask:
     '''基本任务'''
@@ -27,6 +30,7 @@ class DanmuTask(BasicTask):
     def run(self):
         history = self.database.get_history()
         respond = self.llm.model.ask(self.data['message'], history=history)
+        logger.info(f'[{self.data["username"]}] {self.data["message"]} -> {respond}')
         self.database.add_item(self.data['username'], self.data['userid'], self.data['message'], respond)
         self.tts.speak(respond)
         self.captions.post(self.data['message'], self.data['username'], self.data['userface'], respond)
@@ -118,20 +122,10 @@ class WebUIEventHandler:
         if self.webui.status.llm:
             self.webui.ui.notify('不能重复连接！',type='negative')
             return False
-        model = self.llm.LoadLLMModule(self.config.LLM_MODEL_LOADER, self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH)
+        model = self.llm.LoadLLMModule(self.config.LLM_MODEL_LOADER, self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
         if model:
             self.model = model
-            self.webui.change_LLM_status(1)
-        else:
-            self.webui.ui.notify('无法连接至LLM',type='negative')
-    
-    def connect_to_LLM(self):
-        if self.webui.status.llm:
-            self.webui.ui.notify('不能重复连接！',type='negative')
-            return False
-        model = self.llm.LoadLLMModule(self.config.LLM_MODEL_LOADER, self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH)
-        if model:
-            self.model = model
+            self.llm.model.is_running = True
             self.webui.change_LLM_status(1)
         else:
             self.webui.ui.notify('无法连接至LLM',type='negative')

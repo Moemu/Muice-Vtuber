@@ -1,5 +1,7 @@
 __pycache__
 log/
+logs/
 config.json
+configs.yml
 *.pyc
 *.db

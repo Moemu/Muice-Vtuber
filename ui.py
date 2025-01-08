@@ -95,11 +95,11 @@ class WebUI:
                         ui.input(label='ROOM_OWNER_AUTH_CODE', value=config.DANMU_ROOM_OWNER_AUTH_CODE, on_change=lambda e: config.save("DANMU_ROOM_OWNER_AUTH_CODE", e.value)).classes('w-64')
                     with ui.card():
                         ui.label("LLM类")
-                        ui.select(label="MODEL_LOADER", options=["api","llmtuner","transformers"], with_input=True, value=config.LLM_MODEL_LOADER, on_change=lambda e: config.save("LLM_MODEL_LOADER", e.value)).classes('w-64')
+                        ui.select(label="MODEL_LOADER", options=["api","llmtuner","transformers","spark"], with_input=True, value=config.LLM_MODEL_LOADER, on_change=lambda e: config.save("LLM_MODEL_LOADER", e.value)).classes('w-64')
                         ui.input(label='MODEL_PATH', value=config.LLM_MODEL_PATH, on_change=lambda e: config.save("LLM_MODEL_PATH", e.value)).classes('w-64')
                         ui.input(label='ADAPTER_PATH', value=config.LLM_ADAPTER_PATH, on_change=lambda e: config.save("LLM_ADAPTER_PATH", e.value)).classes('w-64')
         
-        ui.run(title="Muice Vtuber", favicon='src/favicon.png', reload=False, show=False, language='zh-CN')
+        ui.run(title="Muice Vtuber", favicon='src/favicon.png', reload=False, show=False, language='zh-CN', port=8081)
 
     def start(self):
         return self.__Load()
