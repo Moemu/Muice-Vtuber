@@ -41,8 +41,10 @@ class Database:
         connection = sqlite3.connect('database.db')
         cursor = connection.cursor()
         data_cursor = cursor.execute('''SELECT * FROM CHAT''')
-        history = []
-        for data in data_cursor:
-            history.append([data[4],data[5]])
+        # history = []
+        # for data in data_cursor:
+        #     history.append([data[4],data[5]])
+        # 处理数据
+        data = list(data_cursor)
         connection.close()
-        return history
+        return data

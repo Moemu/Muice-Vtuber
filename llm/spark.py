@@ -62,17 +62,21 @@ class llm:
     
     def generate_history(self, history: list):
         self.history = []
+        if len(history) == 0:
+            return
+        self.is_history = True
+        self.history.append({"role": 'user', "content": self.generate_system_prompt(history[0][0]) + history[0][1]})
         for item in history:
-            self.history.append({"role": 'user', "content": self.generate_system_prompt(item[0]) + item[0]})
+            self.history.append({"role": 'user', "content": item[0]})
             self.history.append({"role": 'assistant', "content": item[1]})
-            self.is_history = True
 
-    def ask(self, user_text: str, history: list):
+    def ask(self, user_text: str, history: list) -> str:
         self.generate_history(history)
         if not self.is_history:
             self.history.append({"role": 'user', "content": self.generate_system_prompt(user_text) + user_text})
         else:
             self.history.append({"role": 'user', "content": user_text})
+        logger.debug(f"发送给Spark的数据: {self.history}")
         self.response = ''
 
         ws = websocket.WebSocketApp(self.url,
