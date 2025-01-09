@@ -110,7 +110,7 @@ class WebUI:
             self.label.all.set_text('正在运行')
             self.status.all = 1
         else:
-            self.icon.all.classes('text-red')
+            self.icon.all.classes(remove = 'text-green', replace = 'text-red')
             self.label.all.set_text('未运行')
             self.status.all = 0
 
@@ -120,7 +120,7 @@ class WebUI:
             self.label.llm.set_text('已连接')
             self.status.llm = 1
         else:
-            self.icon.llm.classes('text-red')
+            self.icon.llm.classes(remove = 'text-green', replace = 'text-red')
             self.label.llm.set_text('未连接')
             self.status.llm = 0
 
