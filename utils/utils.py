@@ -75,5 +75,4 @@ class Captions:
             data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
         result = requests.post(self.captions_server, json = data)
         if result.status_code == 200:
-            print('success...')
             return True

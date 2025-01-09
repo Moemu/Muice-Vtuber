@@ -1,15 +1,62 @@
 from blivedm.blivedm.models.open_live import DanmakuMessage
 from ui import WebUI
 from llm import LLMModule, BasicModel
+from llm.utils.memory import generate_history
 from tts import EdgeTTS
 from utils.utils import play_audio,Captions
 from config import Config
 from sqlite import Database
-import queue,threading,time
+import queue,threading,time,random
 
 import logging
 logger = logging.getLogger('Muice.Event')
 
+# 任务队列
+class EventQueue:
+    def __init__(self) -> None:
+        self.queue = queue.PriorityQueue(maxsize=5)
+        self.threading = threading.Thread(target=self.__run)
+        self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
+        self.leisure_task:LeisureTask = None
+        self.is_running = False
+        self.task_index = 1
+
+    def __run(self):
+        while self.is_running:
+            try:
+                task_class = self.queue.get_nowait()[1]
+                self.timer.cancel()
+                task_class.run()
+            except queue.Empty:
+                if not self.timer.is_alive():
+                    self.timer = threading.Timer(random.randint(50, 90), self.__create_a_leisure_task, ())
+                    self.timer.start()
+                time.sleep(0.5)
+    
+    def __create_a_leisure_task(self):
+        logger.debug('创建了一个闲时任务')
+        self.put(10, self.leisure_task)
+
+    def put(self, priority:int, event):
+        priority += self.task_index
+        self.task_index += 1
+        self.queue.put((priority,event))
+
+    def start(self) -> bool:
+        if not self.threading.is_alive():
+            self.is_running = True
+            self.timer.start()
+            self.threading.start()
+            logger.info('事件队列已启动')
+        return self.is_running
+        
+    def stop(self):
+        self.is_running = False
+        self.timer.cancel()
+        self.threading.join()
+        logger.info('事件队列已停止')
+
+# 任务处理基类
 class BasicTask:
     '''基本任务'''
     def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database) -> None:
@@ -28,11 +75,15 @@ class DanmuTask(BasicTask):
         self.data = data
     
     def run(self):
-        history = self.database.get_history()
+        database_history = self.database.get_history()
+        history = generate_history(self.data['message'], database_history, self.data['userid'])
+        logger.info(f'[{self.data["username"]}] 获取到的历史记录: {history}')
         respond = self.llm.model.ask(self.data['message'], history=history)
         logger.info(f'[{self.data["username"]}] {self.data["message"]} -> {respond}')
         self.database.add_item(self.data['username'], self.data['userid'], self.data['message'], respond)
-        self.tts.speak(respond)
+        # logger.info('TTS处理...')
+        # self.tts.speak(respond)
+        logger.info('字幕发布...')
         self.captions.post(self.data['message'], self.data['username'], self.data['userface'], respond)
         play_audio()
 
@@ -42,53 +93,16 @@ class LeisureTask(BasicTask):
     
     def run(self):
         # history = self.database.get_history()
-        respond = self.llm.model.ask('（发起一个新话题）', history=[])
-        self.database.add_item('闲时任务', '0', '（发起一个新话题）', respond)
-        self.tts.speak(respond)
+        active_prompts = ['<生成推文: 胡思乱想>', '<生成推文: AI生活>', '<生成推文: AI思考>', '<生成推文: 表达爱意>', '<生成推文: 情感建议>']
+        LeisurePrompt = random.choice(active_prompts)
+        respond = self.llm.model.ask(LeisurePrompt, history=[])
+        self.database.add_item('闲时任务', '0', LeisurePrompt, respond)
+        # self.tts.speak(respond)
         self.captions.post('', '', '', respond, leisure=True)
         play_audio()
 
-class EventQueue:
-    def __init__(self) -> None:
-        self.queue = queue.PriorityQueue(maxsize=5)
-        self.threading = threading.Thread(target=self.__run)
-        self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
-        self.leisure_task:LeisureTask = None
-        self.is_running = False
-        self.task_index = 1
 
-    def __run(self):
-        while self.is_running:
-            try:
-                task_class = self.queue.get_nowait()[1]
-                self.timer.cancel()
-                task_class.run()
-            except queue.Empty:
-                if not self.timer.is_alive():
-                    self.timer = threading.Timer(3, self.__create_a_leisure_task, ())
-                    self.timer.start()
-                time.sleep(0.5)
-    
-    def __create_a_leisure_task(self):
-        self.put(10, self.leisure_task)
-
-    def put(self, priority:int, event:BasicTask):
-        priority += self.task_index
-        self.task_index += 1
-        self.queue.put((priority,event))
-
-    def start(self) -> bool:
-        if not self.threading.is_alive():
-            self.is_running = True
-            self.timer.start()
-            self.threading.start()
-        return self.is_running
-        
-    def stop(self):
-        self.is_running = False
-        self.timer.cancel()
-        self.threading.join()
-
+# WebUI事件处理
 class WebUIEventHandler:
     def __init__(self, config: Config, llm:LLMModule, captions:Captions, eventqueue:EventQueue, webui = None, danmu = None, test = None) -> None:
         self.config = config
@@ -162,6 +176,8 @@ class WebUIEventHandler:
     def CreateATestDanmuEvent(self):
         self.test.CreateADanmuEvent()
 
+
+# 事件处理分发
 class EventHandler:
     def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, eventquene:EventQueue, ui:WebUI = None) -> None:
         self.llm = llm
@@ -172,6 +188,7 @@ class EventHandler:
         self.ui = ui
 
     def DanmuEvent(self, danmu:DanmakuMessage):
+        logger.info(f'{danmu.uname}：{danmu.msg}')
         self.ui.ui_danmu.push(f'{danmu.uname}：{danmu.msg}')
         # self.ui.ui_danmu.push(f'醒目留言 ¥{message.rmb} {message.uname}：{message.message}')
         message = danmu.msg

@@ -13,6 +13,8 @@ import logging
 class App:
     def __init__(self):
         self.logger = init_logger(logging.DEBUG)
+        self.logger.info('初始化应用程序...')
+
         self.config = Config()
         self.tts = EdgeTTS()
         self.ui = WebUI()
@@ -38,9 +40,10 @@ class App:
 
     def start(self):
         try:
+            self.logger.info("加载WebUI...")
             self.ui.start()
         except Exception as e:
-            self.logger.error(f"Failed to start the application: {e}")
+            self.logger.error(f"加载WebUI时出现了问题: {e}", exc_info=True)
 
 if __name__ in {"__main__", "__mp_main__"}:
     app = App()
