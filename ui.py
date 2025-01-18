@@ -99,7 +99,7 @@ class WebUI:
                         ui.input(label='MODEL_PATH', value=config.LLM_MODEL_PATH, on_change=lambda e: config.save("LLM_MODEL_PATH", e.value)).classes('w-64')
                         ui.input(label='ADAPTER_PATH', value=config.LLM_ADAPTER_PATH, on_change=lambda e: config.save("LLM_ADAPTER_PATH", e.value)).classes('w-64')
         
-        ui.run(title="Muice Vtuber", favicon='src/favicon.png', reload=False, show=False, language='zh-CN', port=8081)
+        ui.run(title="Muice Vtuber", favicon='src/favicon.png', reload=False, show=False, language='zh-CN', port=8081, show_welcome_message = False)
 
     def start(self):
         return self.__Load()
