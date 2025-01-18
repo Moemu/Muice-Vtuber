@@ -40,7 +40,7 @@ class App:
 
     def start(self):
         try:
-            self.logger.info("加载WebUI...")
+            self.logger.info("WebUI运行地址: http://localhost:8081")
             self.ui.start()
         except Exception as e:
             self.logger.error(f"加载WebUI时出现了问题: {e}", exc_info=True)
