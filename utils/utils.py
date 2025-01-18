@@ -5,6 +5,8 @@ import shlex
 import pyaudio
 import wave
 import requests
+import base64
+import emoji
 
 async def run_command(command: str, log: object, cwd: str = os.path.dirname(os.path.abspath(__file__))) -> None:
     command = command.replace('python3', sys.executable)
@@ -41,7 +43,7 @@ def play_audio(file_path:str = './log/output.wav'):
                     channels=wf.getnchannels(),
                     rate=wf.getframerate(),
                     output=True,
-                    output_device_index=8)
+                    output_device_index=7)
 
     # 读取音频文件并播放
     data = wf.readframes(1024)
@@ -54,6 +56,14 @@ def play_audio(file_path:str = './log/output.wav'):
     stream.close()
     wf.close()
     p.terminate()
+
+def get_avatar_base64(url:str) -> str:
+    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+    return base64.b64encode(response.content).decode("ascii")
+
+def message_precheck(message:str) -> str:
+    return message.startswith('!') or message.startswith('#') or (message.startswith('[') and message.endswith(']')) or emoji.emoji_count(message) == len(message)
+
 
 class Captions:
     def __init__(self) -> None:

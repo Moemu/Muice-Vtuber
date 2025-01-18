@@ -4,17 +4,16 @@ from blivedm.blivedm.models import web as web_models
 from event import EventHandler
 import logging,asyncio,threading,time
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('Muice.Danmu')
 
 class DanmuHandler(blivedm.BaseHandler):
     def __init__(self, EventHandler:EventHandler):
         self.EventHandler = EventHandler
 
     def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
-        logging.debug(f'[{client.room_id}] 心跳')
+        pass
 
     def _on_open_live_danmaku(self, client: blivedm.OpenLiveClient, message: open_models.DanmakuMessage):
-        logging.info(f'{message.uname}：{message.msg}')
         self.EventHandler.DanmuEvent(message)
 
     def _on_open_live_gift(self, client: blivedm.OpenLiveClient, message: open_models.GiftMessage):
