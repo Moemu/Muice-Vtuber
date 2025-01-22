@@ -61,8 +61,18 @@ def get_avatar_base64(url:str) -> str:
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     return base64.b64encode(response.content).decode("ascii")
 
-def message_precheck(message:str) -> str:
-    return message.startswith('!') or message.startswith('#') or (message.startswith('[') and message.endswith(']')) or emoji.emoji_count(message) == len(message)
+def message_precheck(message:str) -> bool:
+    # 纯emoji消息不发送
+    if emoji.emoji_count(message) == len(message):
+        return False
+    # B站表情检测
+    if message.startswith('[') and message.endswith(']'):
+        return False
+    # 违禁字符检测
+    if '\u200e' in message:
+        return False
+    # 前缀检测
+    return not (message.startswith('＃') or message.startswith('#'))
 
 
 class Captions:

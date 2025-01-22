@@ -205,7 +205,7 @@ class EventHandler:
         username = danmu.uname
         userface = danmu.uface
         userid = danmu.open_id
-        if not self.llm.model.is_running or not self.captions.is_connecting or message_precheck(message):
+        if not self.llm.model.is_running or not self.captions.is_connecting or not message_precheck(message):
             return
         userface = get_avatar_base64(userface + '@250x250')
         data = {'message': message, 'username': username, 'userface': f'data:image/png;base64,' + userface, 'userid': userid}
