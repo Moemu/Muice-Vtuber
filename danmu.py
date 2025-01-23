@@ -17,18 +17,15 @@ class DanmuHandler(blivedm.BaseHandler):
         self.EventHandler.DanmuEvent(message)
 
     def _on_open_live_gift(self, client: blivedm.OpenLiveClient, message: open_models.GiftMessage):
-        coin_type = '金瓜子' if message.paid else '银瓜子'
-        total_coin = message.price * message.gift_num
-        logger.info(f'{message.uname} 赠送{message.gift_name}x{message.gift_num}'
-              f' （{coin_type}x{total_coin}）')
+        self.EventHandler.GiftEvent(message)
 
     def _on_open_live_buy_guard(self, client: blivedm.OpenLiveClient, message: open_models.GuardBuyMessage):
-        logger.info(f'{message.user_info.uname} 购买 大航海等级={message.guard_level}')
+        self.EventHandler.GuardEvent(message)
 
     def _on_open_live_super_chat(
         self, client: blivedm.OpenLiveClient, message: open_models.SuperChatMessage
     ):
-        logger.info(f'醒目留言 ¥{message.rmb} {message.uname}：{message.message}')
+        self.EventHandler.SuperChatEvent(message)
 
 class Danmu:
     def __init__(self,config,danmuhandler,webui = None):

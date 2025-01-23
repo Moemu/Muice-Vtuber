@@ -1,4 +1,4 @@
-from blivedm.blivedm.models.open_live import DanmakuMessage
+from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage
 from ui import WebUI
 from llm import LLMModule, BasicModel
 from llm.utils.memory import generate_history
@@ -79,6 +79,7 @@ class BasicTask:
         pass
 
 class DanmuTask(BasicTask):
+    '''弹幕任务'''
     def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
         super(DanmuTask, self).__init__(llm,tts,captions,database)
         self.data = data
@@ -97,6 +98,58 @@ class DanmuTask(BasicTask):
         play_audio()
         self.database.add_item(self.data['username'], self.data['userid'], self.data['message'], respond)
         logger.info(f'[{self.data["username"]}] 事件处理结束')
+
+class GiftTask(BasicTask):
+    '''礼物任务'''
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
+        super(GiftTask, self).__init__(llm,tts,captions,database)
+        self.data = data
+    
+    def run(self):
+        logger.info(f'[{self.data["username"]}] 赠送了 {self.data["gift_name"]} x {self.data["gift_num"]} 总价值: {self.data["total_value"]}')
+        respond = f"感谢 {self.data['username']} 赠送的 {self.data['gift_name']} 喵，雪雪最喜欢你了喵！"
+        logger.info(f'[{self.data["username"]}] {self.data["gift_name"]} -> {respond}')
+        logger.info(f'[{self.data["username"]}] TTS处理...')
+        if not self.tts.speak(respond):
+            return
+        play_audio()
+        self.database.add_gift(self.data['username'], self.data['userid'], self.data['gift_name'], self.data['total_value'])
+        logger.info(f'[{self.data["username"]}] 事件处理结束')
+
+class SuperChatTask(BasicTask):
+    '''醒目留言任务'''
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
+        super(SuperChatTask, self).__init__(llm,tts,captions,database)
+        self.data = data
+    
+    def run(self):
+        logger.info(f'[{self.data["username"]}] 赠送了 ¥{self.data["rmb"]} 醒目留言：{self.data["message"]}')
+        database_history = self.database.get_history()
+        history = generate_history(self.data['message'], database_history, self.data['userid'])
+        model_output = self.llm.model.ask(self.data['message'], history=history)
+        respond = f"感谢 {self.data['username']} 的SuperChat。\n" + model_output
+        logger.info(f'[{self.data["username"]}] 醒目留言 -> {respond}')
+        logger.info(f'[{self.data["username"]}] TTS处理...')
+        if not self.tts.speak(respond):
+            return
+        play_audio()
+        self.database.add_item(self.data['username'], self.data['userid'], f'(¥{self.data["rmb"]}醒目留言)' + self.data['message'], model_output)
+        logger.info(f'[{self.data["username"]}] 事件处理结束')
+
+class BuyGuardTask(BasicTask):
+    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
+        super(BuyGuardTask, self).__init__(llm,tts,captions,database)
+        self.data = data
+    
+    def run(self):
+        logger.info(f'{self.data["username"]} 购买了大航海等级 {self.data["guard_level"]}')
+        respond = f'感谢 {self.data["username"]} 的舰长喵！会有什么神奇的事情发生呢？'
+        logger.info(f'{self.data["username"]} TTS处理...')
+        if not self.tts.speak(respond):
+            return
+        play_audio()
+        self.database.add_gift(self.data['username'], self.data['userid'], f'大航海等级{self.data["guard_level"]}', self.data['price'])
+        logger.info(f'{self.data["username"]} 事件处理结束')
 
 class LeisureTask(BasicTask):
     def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database) -> None:
@@ -216,4 +269,33 @@ class EventHandler:
         userface = get_avatar_base64(userface + '@250x250')
         data = {'message': message, 'username': username, 'userface': f'data:image/png;base64,' + userface, 'userid': userid}
         task = DanmuTask(self.llm, self.tts, self.captions, self.database, data)
+        self.quene.put(5, task)
+
+    def GiftEvent(self, gift:GiftMessage):
+        if not gift.paid:
+            return
+        username = gift.uname
+        userid = gift.open_id
+        gift_name = gift.gift_name
+        total_value = gift.price * gift.gift_num / 1000
+        data = {'username': username, 'userid': userid, 'gift_name': gift_name, 'gift_num': gift.gift_num, 'total_value': total_value}
+        task = GiftTask(self.llm, self.tts, self.captions, self.database, data)
+        self.quene.put(3, task)
+
+    def SuperChatEvent(self, superchat:SuperChatMessage):
+        username = superchat.uname
+        userid = superchat.open_id
+        message = superchat.message
+        rmb = superchat.rmb
+        data = {'username': username, 'userid': userid, 'message': message, 'rmb': rmb}
+        task = SuperChatTask(self.llm, self.tts, self.captions, self.database, data)
+        self.quene.put(1, task)
+
+    def GuardBuyEvent(self, message:GuardBuyMessage):
+        username = message.user_info.uname
+        userid = message.user_info.open_id
+        guard_level = message.guard_level
+        price = message.price / 1000
+        data = {'username': username, 'userid': userid, 'guard_level': guard_level, 'price': price}
+        task = BuyGuardTask(self.llm, self.tts, self.captions, self.database, data)
         self.quene.put(1, task)

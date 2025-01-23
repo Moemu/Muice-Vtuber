@@ -15,13 +15,20 @@ class Database:
             USERID TEXT NOT NULL,
             DANMU TEXT NOT NULL,
             RESPOND TEXT NOT NULL);''')
+        cursor.execute('''CREATE TABLE GIFT(
+            ID INT PRIMARY KEY NOT NULL,
+            TIME TEXT NOT NULL,
+            USERNAME TEXT NOT NULL,
+            USERID TEXT NOT NULL,
+            GIFTNAME TEXT NOT NULL,
+            TOTALPRICE NUMERIC NOT NULL);''')
         connection.commit()
         connection.close()
 
-    def __get_lastest_id(self) -> int:
+    def __get_lastest_id(self, TABLE:str = 'CHAT') -> int:
         connection = sqlite3.connect('database.db')
         cursor = connection.cursor()
-        data_cursor = cursor.execute('''SELECT * FROM CHAT ORDER BY ID DESC LIMIT 1''')
+        data_cursor = cursor.execute(f'''SELECT * FROM {TABLE} ORDER BY ID DESC LIMIT 1''')
         lastest_id = 0
         for data in data_cursor:
             lastest_id = data[0]
@@ -37,6 +44,15 @@ class Database:
         connection.commit()
         connection.close()
 
+    def add_gift(self, Username:str, Userid:str, Giftname:str, Totalprice:float):
+        current_time = time.strftime('%Y.%m.%d %H:%M:%S')
+        available_id = self.__get_lastest_id('GIFT') + 1
+        connection = sqlite3.connect('database.db')
+        cursor = connection.cursor()
+        cursor.execute(f'''INSERT INTO GIFT VALUES ({available_id}, '{current_time}', '{Username}', '{Userid}', '{Giftname}', {Totalprice});''')
+        connection.commit()
+        connection.close()
+        
     def get_history(self) -> list:
         connection = sqlite3.connect('database.db')
         cursor = connection.cursor()
