@@ -18,6 +18,9 @@ class Config:
         self.LLM_EXTRA_ARGS = self.config['model']['extra_args']
         self.LLM_SYSTEM_PROMPT = self.config['model']['system_prompt']
         self.LLM_AUTO_SYSTEM_PROMPT = self.config['model']['auto_system_prompt']
+        self.BOT_APPID = self.config['bot']['appid']
+        self.BOT_TOKEN = self.config['bot']['token']
+        self.BOT_SECRET = self.config['bot']['secret']
 
     def save(self, key:str, value:str) -> None:
         self.config[key] = value
