@@ -126,7 +126,13 @@ class WebUIEventHandler:
         self.model:BasicModel = None
         self.chat_history = []
 
-    def start_all(self):
+    async def start_all(self):
+        self.connect_to_LLM()
+        self.connect_to_captions()
+        await self.connect_to_blivedm()
+        self.start_service()
+    
+    def start_service(self):
         if self.webui.status.all:
             self.webui.ui.notify('无法启动：已启动了一个进程',type='negative')
             return False
@@ -136,7 +142,7 @@ class WebUIEventHandler:
         else:
             self.webui.ui.notify('无法启动：必要的组件未全部连接',type='negative')
 
-    def stop_all(self):
+    def stop_service(self):
         if not self.webui.status.all:
             self.webui.ui.notify('无法关闭：进程未在运行中',type='negative')
             return False

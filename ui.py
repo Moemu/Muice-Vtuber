@@ -62,8 +62,9 @@ class WebUI:
 
                 with ui.card().classes('w-50'):
                     ui.label('总操作台').style('font-size: large')
-                    ui.button('开始消息处理',on_click=self.action.start_all)
-                    ui.button('终止消息处理',on_click=self.action.stop_all)    
+                    ui.button('一键启动',on_click=self.action.start_all)
+                    ui.button('开始消息处理',on_click=self.action.start_service)
+                    ui.button('终止消息处理',on_click=self.action.stop_service)    
 
                 with ui.card().classes('w-50'):
                     ui.label('LLM操作台').style('font-size: large')

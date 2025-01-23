@@ -7,6 +7,40 @@ import wave
 import requests
 import base64
 import emoji
+import threading
+import logging
+from captions.app import Captions as Captions_app
+
+logger = logging.getLogger('Muice.Utils')
+
+
+class Captions:
+    def __init__(self) -> None:
+        self.captions_server = 'http://127.0.0.1:5500/api/sendmessage'
+        self.is_connecting = False
+        self.app = None
+
+    def connect(self) -> bool:
+        try:
+            captions_app = Captions_app()
+            self.app = threading.Thread(target=captions_app.run)
+            self.app.start()
+            self.is_connecting = True
+            logger.info(f"已连接到字幕服务器")
+            return True
+        except:
+            logger.info('连接失败',exc_info=True)
+            return False
+        
+    def post(self, message:str, username:str, userface:str, respond:str, leisure:bool = False) -> bool:
+        if leisure:
+            data = {'user':'', 'avatar':'', 'message':'', 'respond':respond}
+        else:
+            data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+        result = requests.post(self.captions_server, json = data)
+        if result.status_code == 200:
+            return True
+
 
 async def run_command(command: str, log: object, cwd: str = os.path.dirname(os.path.abspath(__file__))) -> None:
     command = command.replace('python3', sys.executable)
@@ -73,26 +107,3 @@ def message_precheck(message:str) -> bool:
         return False
     # 前缀检测
     return not (message.startswith('＃') or message.startswith('#'))
-
-
-class Captions:
-    def __init__(self) -> None:
-        self.captions_server = 'http://127.0.0.1:5500/api/sendmessage'
-        self.is_connecting = False
-
-    def connect(self) -> bool:
-        try:
-            requests.get(self.captions_server)
-            self.is_connecting = True
-            return True
-        except:
-            return False
-        
-    def post(self, message:str, username:str, userface:str, respond:str, leisure:bool = False) -> bool:
-        if leisure:
-            data = {'user':'', 'avatar':'', 'message':'', 'respond':respond}
-        else:
-            data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
-        result = requests.post(self.captions_server, json = data)
-        if result.status_code == 200:
-            return True

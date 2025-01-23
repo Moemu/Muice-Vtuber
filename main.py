@@ -7,7 +7,7 @@ from ui import WebUI
 from utils.utils import Captions
 from test import Test
 from sqlite import Database
-from utils.logging import init_logger
+from utils.logger import init_logger
 import logging
 
 class App:
