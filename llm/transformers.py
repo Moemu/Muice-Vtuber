@@ -3,9 +3,10 @@ import os
 import torch
 
 from transformers import AutoTokenizer, AutoModel, AutoConfig
+from custom_types import BasicModel
 
 
-class llm:
+class llm(BasicModel):
     """
     使用transformers方案加载, 适合通过P-tuning V2方式微调的模型加载
     """
@@ -27,6 +28,7 @@ class llm:
         model.transformer.prefix_encoder.load_state_dict(new_prefix_state_dict)
         model.transformer.prefix_encoder.float()
         self.model = model.eval()
+        self.is_running = True
 
     def ask(self, user_text: str, history: list, ):
         response, _ = self.model.chat(self.tokenizer, user_text, history=history)

@@ -1,14 +1,16 @@
+from custom_types import BasicModel
 import requests as r
 import json
 
 
-class llm:
+class llm(BasicModel):
     """
     通过RWKV-RUNNER的api服务, 使用第三方RWKV模型
     """
 
-    def __init__(self, url: str, *args, **kwargs):
+    def load(self, url: str, *args, **kwargs):
         self.url = url + "/chat/completions"
+        self.is_running = True
 
     def ask(self, user_text: str, history: list, ):
         messages = []

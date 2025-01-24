@@ -1,4 +1,4 @@
-from nicegui import ui
+from nicegui import ui,app
 from config import Config
 import logging
 
@@ -29,6 +29,7 @@ class WebUI:
     def __init__(self,WebUIEventHandler = None) -> None:
         self.ui_danmu = None
         self.action = WebUIEventHandler
+        self.app = app
         self.ui = ui
 
     def __Load(self):

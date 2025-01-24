@@ -1,6 +1,5 @@
 from event import EventHandler, WebUIEventHandler, EventQueue, LeisureTask
 from tts import EdgeTTS
-from llm import LLMModule
 from danmu import Danmu, DanmuHandler
 from config import Config
 from ui import WebUI
@@ -8,7 +7,10 @@ from utils.utils import Captions
 from test import Test
 from sqlite import Database
 from utils.logger import init_logger
+from custom_types import BasicModel
+import signal
 import logging
+import importlib
 
 class App:
     def __init__(self):
@@ -18,15 +20,15 @@ class App:
         self.config = Config()
         self.tts = EdgeTTS()
         self.ui = WebUI()
-        self.llm = LLMModule()
+        self.model:BasicModel = importlib.import_module(f"llm.{self.config.LLM_MODEL_LOADER}").llm()
         self.captions = Captions()
         self.database = Database()
-        self.leisuretask = LeisureTask(self.llm, self.tts, self.captions, self.database)
+        self.leisuretask = LeisureTask(self.model, self.tts, self.captions, self.database)
         self.queue = EventQueue()
         self.queue.leisure_task = self.leisuretask
 
-        self.event_handler = EventHandler(self.llm, self.tts, self.captions, self.database, self.queue, self.ui)
-        self.web_ui_event_handler = WebUIEventHandler(self.config, self.llm, self.captions, self.queue)
+        self.event_handler = EventHandler(self.model, self.tts, self.captions, self.database, self.queue, self.ui)
+        self.web_ui_event_handler = WebUIEventHandler(self.config, self.model, self.captions, self.queue)
         self.danmu_handler = DanmuHandler(self.event_handler)
         self.test = Test(self.event_handler)
 
@@ -37,6 +39,8 @@ class App:
         self.web_ui_event_handler.webui = self.ui
         self.web_ui_event_handler.danmu = self.danmu
         self.web_ui_event_handler.test = self.test
+
+        signal.signal(signal.SIGINT, self.web_ui_event_handler.shutdown)
 
     def start(self):
         try:

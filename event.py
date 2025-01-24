@@ -1,12 +1,12 @@
 from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage
+from custom_types import BasicTask,BasicModel
 from ui import WebUI
-from llm import LLMModule, BasicModel
 from llm.utils.memory import generate_history
 from tts import EdgeTTS
 from utils.utils import play_audio,Captions, get_avatar_base64, message_precheck
 from config import Config
 from sqlite import Database
-import queue,threading,time,random
+import queue,threading,time,random,sys
 
 import logging
 logger = logging.getLogger('Muice.Event')
@@ -15,7 +15,7 @@ logger = logging.getLogger('Muice.Event')
 class EventQueue:
     def __init__(self, first_run = True) -> None:
         self.queue = queue.PriorityQueue(maxsize=5)
-        self.threading = threading.Thread(target=self.__run)
+        self.threading = threading.Thread(target=self.__run, daemon=True)
         self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
         self.leisure_task:LeisureTask = None
         self.is_running = False
@@ -65,31 +65,15 @@ class EventQueue:
         self.threading.join()
         logger.info('事件队列已停止')
 
-# 任务处理基类
-class BasicTask:
-    '''基本任务'''
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database) -> None:
-        self.llm = llm
-        self.tts = tts
-        self.captions = captions
-        self.database = database
-
-    def run():
-        '''基本任务运行入口'''
-        pass
 
 class DanmuTask(BasicTask):
     '''弹幕任务'''
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
-        super(DanmuTask, self).__init__(llm,tts,captions,database)
-        self.data = data
-    
     def run(self):
         database_history = self.database.get_history()
         logger.info(f'[{self.data["username"]}]：{self.data["message"]}')
         history = generate_history(self.data['message'], database_history, self.data['userid'])
         logger.info(f'[{self.data["username"]}] 获取到的历史记录: {history}')
-        respond = self.llm.model.ask(self.data['message'], history=history)
+        respond = self.model.ask(self.data['message'], history=history)
         logger.info(f'[{self.data["username"]}] {self.data["message"]} -> {respond}')
         logger.info(f'[{self.data["username"]}] TTS处理...')
         if not self.tts.speak(respond):
@@ -101,10 +85,6 @@ class DanmuTask(BasicTask):
 
 class GiftTask(BasicTask):
     '''礼物任务'''
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
-        super(GiftTask, self).__init__(llm,tts,captions,database)
-        self.data = data
-    
     def run(self):
         logger.info(f'[{self.data["username"]}] 赠送了 {self.data["gift_name"]} x {self.data["gift_num"]} 总价值: {self.data["total_value"]}')
         respond = f"感谢 {self.data['username']} 赠送的 {self.data['gift_name']} 喵，雪雪最喜欢你了喵！"
@@ -118,15 +98,11 @@ class GiftTask(BasicTask):
 
 class SuperChatTask(BasicTask):
     '''醒目留言任务'''
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
-        super(SuperChatTask, self).__init__(llm,tts,captions,database)
-        self.data = data
-    
     def run(self):
         logger.info(f'[{self.data["username"]}] 赠送了 ¥{self.data["rmb"]} 醒目留言：{self.data["message"]}')
         database_history = self.database.get_history()
         history = generate_history(self.data['message'], database_history, self.data['userid'])
-        model_output = self.llm.model.ask(self.data['message'], history=history)
+        model_output = self.model.ask(self.data['message'], history=history)
         respond = f"感谢 {self.data['username']} 的SuperChat。\n" + model_output
         logger.info(f'[{self.data["username"]}] 醒目留言 -> {respond}')
         logger.info(f'[{self.data["username"]}] TTS处理...')
@@ -137,10 +113,7 @@ class SuperChatTask(BasicTask):
         logger.info(f'[{self.data["username"]}] 事件处理结束')
 
 class BuyGuardTask(BasicTask):
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, data:dict) -> None:
-        super(BuyGuardTask, self).__init__(llm,tts,captions,database)
-        self.data = data
-    
+    '''上舰任务'''
     def run(self):
         logger.info(f'{self.data["username"]} 购买了大航海等级 {self.data["guard_level"]}')
         respond = f'感谢 {self.data["username"]} 的舰长喵！会有什么神奇的事情发生呢？'
@@ -152,31 +125,28 @@ class BuyGuardTask(BasicTask):
         logger.info(f'{self.data["username"]} 事件处理结束')
 
 class LeisureTask(BasicTask):
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database) -> None:
-        super(LeisureTask, self).__init__(llm,tts,captions,database)
-    
     def run(self):
         # history = self.database.get_history()
         active_prompts = ['<生成推文: 胡思乱想>', '<生成推文: AI生活>', '<生成推文: AI思考>', '<生成推文: 表达爱意>', '<生成推文: 情感建议>']
         LeisurePrompt = random.choice(active_prompts)
-        respond = self.llm.model.ask(LeisurePrompt, history=[])
+        respond = self.model.ask(LeisurePrompt, history=[])
         self.database.add_item('闲时任务', '0', LeisurePrompt, respond)
         self.tts.speak(respond)
         self.captions.post('', '', '', respond, leisure=True)
         play_audio()
 
 
-# WebUI事件处理
+# WebUI事件处理(总事件处理)
 class WebUIEventHandler:
-    def __init__(self, config: Config, llm:LLMModule, captions:Captions, eventqueue:EventQueue, webui = None, danmu = None, test = None) -> None:
+    def __init__(self, config: Config, model: BasicModel, captions:Captions, eventqueue:EventQueue, webui = None, danmu = None, test = None) -> None:
         self.config = config
+        self.model = model
         self.webui = webui
         self.danmu = danmu
-        self.llm = llm
         self.captions = captions
         self.queue = eventqueue
         self.test = test
-        self.model:BasicModel = None
+        self.model = model
         self.chat_history = []
 
     async def start_all(self):
@@ -206,13 +176,13 @@ class WebUIEventHandler:
         if self.webui.status.llm:
             self.webui.ui.notify('不能重复连接！',type='negative')
             return False
-        model = self.llm.LoadLLMModule(self.config.LLM_MODEL_LOADER, self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
-        if model:
-            self.model = model
-            self.llm.model.is_running = True
-            self.webui.change_LLM_status(1)
-        else:
+        try:
+            logger.info(f"加载模型：{self.config.LLM_MODEL_LOADER}")
+            self.model.load(self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
+            self.webui.change_LLM_status(1) if self.model.is_running else self.webui.change_LLM_status(0)
+        except:
             self.webui.ui.notify('无法连接至LLM',type='negative')
+            logger.error(f"无法加载模型：{self.config.LLM_MODEL_LOADER}", exc_info=True)
 
     async def connect_to_blivedm(self):
         if self.webui.status.blivedm:
@@ -246,11 +216,18 @@ class WebUIEventHandler:
     def CreateATestDanmuEvent(self):
         self.test.CreateADanmuEvent()
 
+    def shutdown(self, signum, frame):
+        self.model.is_running = False
+        self.queue.stop()
+        self.danmu.close_client()
+        self.captions.disconnect()
+        self.webui.app.shutdown()
+        sys.exit(0)
 
 # 事件处理分发
 class EventHandler:
-    def __init__(self, llm:LLMModule, tts:EdgeTTS, captions:Captions, database:Database, eventquene:EventQueue, ui:WebUI = None) -> None:
-        self.llm = llm
+    def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database, eventquene:EventQueue, ui:WebUI = None) -> None:
+        self.model = model
         self.tts = tts
         self.captions = captions
         self.database = database
@@ -264,11 +241,11 @@ class EventHandler:
         username = danmu.uname
         userface = danmu.uface
         userid = danmu.open_id
-        if not self.llm.model.is_running or not self.captions.is_connecting or not message_precheck(message):
+        if not self.model.is_running or not self.captions.is_connecting or not message_precheck(message):
             return
         userface = get_avatar_base64(userface + '@250x250')
         data = {'message': message, 'username': username, 'userface': f'data:image/png;base64,' + userface, 'userid': userid}
-        task = DanmuTask(self.llm, self.tts, self.captions, self.database, data)
+        task = DanmuTask(self.model, self.tts, self.captions, self.database, data)
         self.quene.put(5, task)
 
     def GiftEvent(self, gift:GiftMessage):

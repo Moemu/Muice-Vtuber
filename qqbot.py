@@ -4,9 +4,10 @@ import time
 import fastapi
 import uvicorn
 import asyncio
+import importlib
 from botpy.types.message import Message
 from botpy.types.message import Reference
-from llm import LLMModule
+from custom_types import BasicModel
 from config import Config
 from datetime import datetime
 from botpy.logging import DEFAULT_FILE_HANDLER
@@ -192,8 +193,8 @@ class MyClient(botpy.Client):
         self.NOTIFICATION_CHANNEL_ID = "679321509"
         self.CHAT_CHANNEL_ID = "679328087"
         self.config = Config()
-        self.llm = LLMModule()
-        self.model = self.llm.LoadLLMModule(self.config.LLM_MODEL_LOADER, self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
+        self.model:BasicModel = importlib.import_module(f"llm.{self.config.LLM_MODEL_LOADER}").llm()
+        self.model.load(self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
         self.LiveStatus = False
 
     async def on_at_message_create(self, message: Message):

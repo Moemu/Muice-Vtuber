@@ -1,4 +1,4 @@
-from . import BasicModel
+from custom_types import BasicModel
 import requests as r
 import json
 
@@ -8,7 +8,7 @@ class llm(BasicModel):
     使用已经存在的API, 这个API应该接受prompt和history两个参数, 返回response
     """
 
-    def __init__(self, url: str, *args, **kwargs):
+    def load(self, url: str, *args, **kwargs):
         if url == '':
             raise ValueError
         self.url = url

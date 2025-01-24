@@ -33,7 +33,7 @@ class EdgeTTS:
 
     def speak(self,text) -> bool:
         self.text = text
-        client_thread = threading.Thread(target=self.__speak)
+        client_thread = threading.Thread(target=self.__speak, daemon=True)
         client_thread.start()
         client_thread.join()
         return self.result

@@ -2,23 +2,25 @@ import websocket
 import json
 import logging
 from llm.utils.auto_system_prompt import auto_system_prompt
+from custom_types import BasicModel
 
 logger = logging.getLogger('Muice')
 
-class llm:
+class llm(BasicModel):
     """
     星火大模型
     """
 
-    def __init__(self, model_path:str, adapter_path:str, system_prompt:str, auto_system_prompt:bool, *args, **kwargs):
-        self.app_id =  args[0]['app_id']
-        self.service_id = args[0]['service_id']
-        self.resource_id = args[0]['resource_id']
+    def load(self, model_path:str, adapter_path:str, system_prompt:str, auto_system_prompt:bool, extra_args:dict):
+        self.app_id =  extra_args['app_id']
+        self.service_id = extra_args['service_id']
+        self.resource_id = extra_args['resource_id']
         self.url = "wss://maas-api.cn-huabei-1.xf-yun.com/v1.1/chat"
         self.system_prompt = system_prompt
         self.auto_system_prompt = auto_system_prompt
         self.response = ''
         self.is_history = False
+        self.is_running = True
 
     def __on_message(self, ws, message):
         response = json.loads(message)

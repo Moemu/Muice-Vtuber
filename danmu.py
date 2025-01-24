@@ -11,6 +11,7 @@ class DanmuHandler(blivedm.BaseHandler):
         self.EventHandler = EventHandler
 
     def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
+        # logger.debug(f"心跳: {message}")
         pass
 
     def _on_open_live_danmaku(self, client: blivedm.OpenLiveClient, message: open_models.DanmakuMessage):
@@ -62,7 +63,7 @@ class Danmu:
             self.loop.close()
 
     def start_client(self):
-        client_thread = threading.Thread(target=self.__start_client)
+        client_thread = threading.Thread(target=self.__start_client, daemon=True)
         client_thread.start()
         self.webui.change_blivedm_status(1)
 
