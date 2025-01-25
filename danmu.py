@@ -1,15 +1,18 @@
 from blivedm import blivedm
 from blivedm.blivedm.models import open_live as open_models
 from blivedm.blivedm.models import web as web_models
-from event import EventHandler
+from event import DanmuEventHandler
 import logging,asyncio,threading,time
 
 logger = logging.getLogger('Muice.Danmu')
 
 class DanmuHandler(blivedm.BaseHandler):
-    def __init__(self, EventHandler:EventHandler):
+    def __init__(self, EventHandler:DanmuEventHandler):
         self.EventHandler = EventHandler
 
+    def on_client_stopped(self, client, exception):
+        self.EventHandler.shutdown()
+    
     def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
         # logger.debug(f"心跳: {message}")
         pass
@@ -63,7 +66,7 @@ class Danmu:
             self.loop.close()
 
     def start_client(self):
-        client_thread = threading.Thread(target=self.__start_client, daemon=True)
+        client_thread = threading.Thread(target=self.__start_client, name='Blivedm', daemon=True)
         client_thread.start()
         self.webui.change_blivedm_status(1)
 

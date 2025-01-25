@@ -16,14 +16,15 @@ logger = logging.getLogger('Muice.Utils')
 
 class Captions:
     def __init__(self) -> None:
-        self.captions_server = 'http://127.0.0.1:5500/api/sendmessage'
+        self.captions_server = 'http://127.0.0.1:8082/api/sendmessage'
         self.is_connecting = False
         self.app = None
+        self.captions_app = None
 
     def connect(self) -> bool:
         try:
-            captions_app = Captions_app()
-            self.app = threading.Thread(target=captions_app.run)
+            self.captions_app = Captions_app()
+            self.app = threading.Thread(target=self.captions_app.run, name='Captions', daemon=True)
             self.app.start()
             self.is_connecting = True
             logger.info(f"已连接到字幕服务器")
@@ -31,7 +32,16 @@ class Captions:
         except:
             logger.info('连接失败',exc_info=True)
             return False
-        
+    
+    def disconnect(self) -> bool:
+        try:
+            self.captions_app.socketio.stop()
+            self.is_connecting = False
+            logger.info(f"已断开字幕服务器")
+            return True
+        except:
+            logger.info('断开失败',exc_info=True)
+    
     def post(self, message:str, username:str, userface:str, respond:str, leisure:bool = False) -> bool:
         if leisure:
             data = {'user':'', 'avatar':'', 'message':'', 'respond':respond}

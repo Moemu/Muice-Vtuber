@@ -13,18 +13,21 @@ class WebUI:
         llm:ui.label = None
         blivedm:ui.label = None
         captions:ui.label = None
+        bot:ui.label = None
 
     class icon:
         all:ui.label = None
         llm:ui.icon = None
         blivedm:ui.icon = None
         captions:ui.label = None
+        bot:ui.label = None
 
     class status:
         all:int = 0
         llm:int = 0
         blivedm:int = 0
         captions:int = 0
+        bot:int = 0
 
     def __init__(self,WebUIEventHandler = None) -> None:
         self.ui_danmu = None
@@ -60,6 +63,10 @@ class WebUI:
                             ui.label('字幕组件状态')
                             self.icon.captions = ui.icon('circle',color='red')
                             self.label.captions = ui.label('未连接')
+                        with ui.row().style('line-height: 1'):
+                            ui.label('QQBot状态')
+                            self.icon.bot = ui.icon('circle',color='red')
+                            self.label.bot = ui.label('未连接')
 
                 with ui.card().classes('w-50'):
                     ui.label('总操作台').style('font-size: large')
@@ -145,3 +152,13 @@ class WebUI:
             self.icon.captions.classes(remove = 'text-green', replace = 'text-red')
             self.label.captions.set_text('未连接')
             self.status.captions = 0
+
+    def change_bot_status(self, status):
+        if status:
+            self.icon.bot.classes('text-green')
+            self.label.bot.set_text('已连接')
+            self.status.bot = 1
+        else:
+            self.icon.bot.classes(remove = 'text-green', replace = 'text-red')
+            self.label.bot.set_text('未连接')
+            self.status.bot = 0

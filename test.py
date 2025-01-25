@@ -1,5 +1,5 @@
 from blivedm.blivedm.models import open_live as open_models
-from event import EventHandler
+from event import DanmuEventHandler
 import dataclasses
 
 @dataclasses.dataclass
@@ -36,7 +36,7 @@ class DemoDanmakuMessage(open_models.DanmakuMessage):
     """弹幕类型 0：普通弹幕 1：表情包弹幕"""
 
 class Test:
-    def __init__(self, EventHandler:EventHandler) -> None:
+    def __init__(self, EventHandler:DanmuEventHandler) -> None:
         self.EventHandler = EventHandler
 
     def CreateADanmuEvent(self) -> None:
