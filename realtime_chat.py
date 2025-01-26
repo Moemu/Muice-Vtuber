@@ -122,6 +122,10 @@ class RealtimeChat:
     def register_keyboard(self):
         keyboard.add_hotkey('ctrl+alt+c', self.toggle_recording)
 
+    def unregister_keyboard(self):
+        keyboard.remove_hotkey('ctrl+alt+c')
+        if self.is_recording:
+            self.stop_record()
         
 
 if __name__ == '__main__':

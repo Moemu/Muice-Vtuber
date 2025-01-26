@@ -14,6 +14,7 @@ class WebUI:
         blivedm:ui.label = None
         captions:ui.label = None
         bot:ui.label = None
+        realtime_chat:ui.label = None
 
     class icon:
         all:ui.label = None
@@ -21,6 +22,7 @@ class WebUI:
         blivedm:ui.icon = None
         captions:ui.label = None
         bot:ui.label = None
+        realtime_chat:ui.label = None
 
     class status:
         all:int = 0
@@ -28,6 +30,7 @@ class WebUI:
         blivedm:int = 0
         captions:int = 0
         bot:int = 0
+        realtime_chat:int = 0
 
     def __init__(self,WebUIEventHandler = None) -> None:
         self.ui_danmu = None
@@ -67,6 +70,10 @@ class WebUI:
                             ui.label('QQBot状态')
                             self.icon.bot = ui.icon('circle',color='red')
                             self.label.bot = ui.label('未连接')
+                        with ui.row().style('line-height: 1'):
+                            ui.label('实时聊天状态')
+                            self.icon.realtime_chat = ui.icon('circle',color='red')
+                            self.label.realtime_chat = ui.label('未启动')
 
                 with ui.card().classes('w-50'):
                     ui.label('总操作台').style('font-size: large')
@@ -86,7 +93,12 @@ class WebUI:
 
                 with ui.card().classes('w-50'):
                     ui.label('字幕组件控制台').style('font-size: large')
-                    ui.button('连接到字幕组件',on_click=self.action.connect_to_captions)                       
+                    ui.button('连接到字幕组件',on_click=self.action.connect_to_captions)
+
+                with ui.card().classes('w-50'):
+                    ui.label('实时对话控制').style('font-size: large')
+                    ui.button('启动实时对话',on_click=self.action.start_realtime_chat)
+                    ui.button('终止实时对话',on_click=self.action.stop_realtime_chat)                      
             
             with ui.tab_panel(tab_danmu):
                 self.ui_danmu =ui.log().classes("w-full overflow-auto").style("height: 50rem")
@@ -162,3 +174,13 @@ class WebUI:
             self.icon.bot.classes(remove = 'text-green', replace = 'text-red')
             self.label.bot.set_text('未连接')
             self.status.bot = 0
+
+    def change_realtime_chat_status(self, status):
+        if status:
+            self.icon.realtime_chat.classes('text-green')
+            self.label.realtime_chat.set_text('已启动')
+            self.status.realtime_chat = 1
+        else:
+            self.icon.realtime_chat.classes(remove = 'text-green', replace = 'text-red')
+            self.label.realtime_chat.set_text('未启动')
+            self.status.realtime_chat = 0

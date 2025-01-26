@@ -15,7 +15,7 @@ logger = logging.getLogger('Muice.Event')
 class EventQueue:
     def __init__(self, first_run = True) -> None:
         self.queue = queue.PriorityQueue(maxsize=5)
-        self.threading = threading.Thread(target=self.__run, daemon=True)
+        self.threading = threading.Thread(target=self.__run, name='EventQueue', daemon=True)
         self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
         self.leisure_task:LeisureTask = None
         self.is_running = False
@@ -138,13 +138,15 @@ class LeisureTask(BasicTask):
 
 # WebUI事件处理(总事件处理)
 class WebUIEventHandler:
-    def __init__(self, config: Config, model: BasicModel, captions:Captions, eventqueue:EventQueue, webui = None, danmu = None, test = None) -> None:
+    def __init__(self, config: Config, model: BasicModel, captions:Captions, eventqueue:EventQueue, bot, realtimechat, webui = None, danmu = None, test = None) -> None:
         self.config = config
         self.model = model
         self.webui = webui
         self.danmu = danmu
         self.captions = captions
         self.queue = eventqueue
+        self.bot = bot
+        self.realtimechat = realtimechat
         self.test = test
         self.model = model
         self.chat_history = []
@@ -153,6 +155,7 @@ class WebUIEventHandler:
         self.connect_to_LLM()
         self.connect_to_captions()
         await self.connect_to_blivedm()
+        # self.start_bot()
         self.start_service()
     
     def start_service(self):
@@ -205,6 +208,13 @@ class WebUIEventHandler:
         else:
             self.webui.ui.notify('无法连接至字幕组件',type='negative')
 
+    def start_bot(self):
+        if self.webui.status.bot:
+            self.webui.ui.notify('不能重复连接！',type='negative')
+            return False
+        self.bot.start()
+        self.webui.change_bot_status(1)
+
     def chat_with_LLM(self,prompt):
         if self.webui.LLM_status:
             respond = self.model.ask(prompt,self.chat_history)
@@ -216,16 +226,29 @@ class WebUIEventHandler:
     def CreateATestDanmuEvent(self):
         self.test.CreateADanmuEvent()
 
-    def shutdown(self, signum, frame):
-        self.model.is_running = False
-        self.queue.stop()
-        self.danmu.close_client()
-        self.captions.disconnect()
-        self.webui.app.shutdown()
-        sys.exit(0)
+    def start_realtime_chat(self):
+        if self.webui.status.realtime_chat:
+            self.webui.ui.notify('不能重复启动！',type='negative')
+            return False
+        if not self.model.is_running:
+            self.webui.ui.notify('LLM未连接',type='negative')
+            return
+        self.webui.change_realtime_chat_status(1)
+        self.realtimechat.register_keyboard()
+        if self.queue.is_running:
+            self.queue.stop()
 
-# 事件处理分发
-class EventHandler:
+    def stop_realtime_chat(self):
+        if not self.webui.status.realtime_chat:
+            self.webui.ui.notify('未启动！',type='negative')
+            return False
+        self.webui.change_realtime_chat_status(0)
+        self.realtimechat.unregister_keyboard()
+        if not self.queue.is_running:
+            self.queue.start()
+
+# 弹幕事件处理分发
+class DanmuEventHandler:
     def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database, eventquene:EventQueue, ui:WebUI = None) -> None:
         self.model = model
         self.tts = tts
@@ -233,6 +256,12 @@ class EventHandler:
         self.database = database
         self.quene = eventquene
         self.ui = ui
+
+    def shutdown(self):
+        '''Blivedm退出'''
+        self.quene.stop()
+        self.ui.change_all_status(0)
+        logger.info('事件处理已暂停')
 
     def DanmuEvent(self, danmu:DanmakuMessage):
         self.ui.ui_danmu.push(f'{danmu.uname}：{danmu.msg}')

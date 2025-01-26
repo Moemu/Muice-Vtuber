@@ -2,9 +2,7 @@ import botpy
 import random
 import time
 import fastapi
-import uvicorn
 import asyncio
-import importlib
 from botpy.types.message import Message
 from botpy.types.message import Reference
 from custom_types import BasicModel
@@ -188,68 +186,55 @@ class FortuneTeller:
 
 
 class MyClient(botpy.Client):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, model:BasicModel, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.NOTIFICATION_CHANNEL_ID = "679321509"
         self.CHAT_CHANNEL_ID = "679328087"
-        self.config = Config()
-        self.model:BasicModel = importlib.import_module(f"llm.{self.config.LLM_MODEL_LOADER}").llm()
-        self.model.load(self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
+        self.model = model
         self.LiveStatus = False
-
+        
     async def on_at_message_create(self, message: Message):
         content = message.content
         content = content.replace(f'<@!{message.mentions[0].id}> ', '')
         message_reference = Reference(message_id=message.id)
         botpy.logger.info(f'content: {content}')
         if content == '/运行状态':
-            respond = f'机器人服务：正常\n大语言模型服务：正常\n直播框架运行状态：{'进行中' if self.LiveStatus else '停止'}'
-        elif content == '/今日运势':
+            respond = f"机器人服务：正常\n大语言模型服务：{'正常' if self.model.is_running else '停止'}\n直播框架运行状态：{'进行中' if self.LiveStatus else '停止'}"
+        elif content == '/今日运势' and self.model.is_running:
             fortune_teller = FortuneTeller()
             today_fortune = fortune_teller.what_is_todays_fortune()
             good_events, bad_events = fortune_teller.what_is_todays_fortune_event()
             respond = f"沐雪今日运势：{today_fortune}\n宜：{'、'.join([event['name'] for event in good_events])}\n忌：{'、'.join([event['name'] for event in bad_events])}"
-        elif content == '/每日金句':
+        elif content == '/每日金句' and self.model.is_running:
             respond = self.model.ask('今日金句是？', history=[])
         else:
             respond = self.model.ask(content, history=[])
         await self.api.post_message(channel_id=message.channel_id, content=respond, msg_id=message.id, message_reference=message_reference) 
 
-    async def LiveStartNotification(self):
-        await self.api.post_message(channel_id=self.NOTIFICATION_CHANNEL_ID, content="沐雪的直播开始啦！欢迎大家来看哦！")
 
-    async def LiveErrorNotification(self):
-        await self.api.post_message(channel_id=self.NOTIFICATION_CHANNEL_ID, content="我看起来撞到哪里了，有人帮我通知一下沐沐吗？")
+class BotApp:
+    def __init__(self, model:BasicModel):
+        self.model = model
+        self.is_started = False
+        self.client = None
 
-@app.get("/start")
-async def start():
-    global client
-    config = Config()
-    intents = botpy.Intents(public_guild_messages=True, guilds=True, guild_message_reactions=True, guild_members=True, interaction=True)
-    client = MyClient(intents=intents, log_level=20, log_format="[%(levelname)s/%(name)s] %(message)s", ext_handlers=DEFAULT_FILE_HANDLER)
-    asyncio.create_task(client.start(appid=config.BOT_APPID, secret=config.BOT_SECRET))
-    return {"status": "running"}
+    def start(self):
+        config = Config()
+        intents = botpy.Intents(public_guild_messages=True, guilds=True, guild_message_reactions=True, guild_members=True, interaction=True)
+        self.client = MyClient(self.model, intents=intents, log_level=20, log_format="[%(levelname)s/%(name)s] %(message)s", ext_handlers=DEFAULT_FILE_HANDLER)
+        asyncio.create_task(self.client.start(appid=config.BOT_APPID, secret=config.BOT_SECRET))
+        self.is_started = True
 
-@app.get("/live_start")
-async def live_start():
-    client.LiveStatus = True
-    await client.LiveStartNotification()
-    return {"status": "success"}
+    def LiveStartNotification(self):
+        task = asyncio.create_task(self.client.api.post_message(channel_id=self.client.NOTIFICATION_CHANNEL_ID, content="沐雪的直播开始啦！欢迎大家来看哦！"))
+        def update_live_status(future):
+            self.client.LiveStatus = True
+        task.add_done_callback(update_live_status)
 
-@app.post("/live_error")
-async def live_error():
-    await client.LiveErrorNotification()
-    return {"status": "success"}
+    def LiveErrorNotification(self):
+        asyncio.create_task(self.client.api.post_message(channel_id=self.client.NOTIFICATION_CHANNEL_ID, content="我看起来撞到哪里了，有人帮我通知一下沐沐吗？"))
 
-@app.get("/live_stop")
-async def live_stop():
-    client.LiveStatus = False
-    return {"status": "success"}
-
-@app.get("/stop")
-async def stop():
-    await client.close()
-    return {"status": "stopped"}
 
 if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8083, workers=1)
+    app = BotApp()
+    app.start()
