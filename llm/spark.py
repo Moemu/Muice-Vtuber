@@ -72,12 +72,12 @@ class llm(BasicModel):
             self.history.append({"role": 'user', "content": item[0]})
             self.history.append({"role": 'assistant', "content": item[1]})
 
-    def ask(self, user_text: str, history: list) -> str:
+    def ask(self, prompt: str, history: list) -> str:
         self.generate_history(history)
         if not self.is_history:
-            self.history.append({"role": 'user', "content": self.generate_system_prompt(user_text) + user_text})
+            self.history.append({"role": 'user', "content": self.generate_system_prompt(prompt) + prompt})
         else:
-            self.history.append({"role": 'user', "content": user_text})
+            self.history.append({"role": 'user', "content": prompt})
         logger.debug(f"发送给Spark的数据: {self.history}")
         self.response = ''
 

@@ -9,12 +9,12 @@ logger = logging.getLogger('Muice.TTS')
 class EdgeTTS:
     def __init__(self) -> None:
         self.__VOICE = "zh-CN-XiaoyiNeural"
-        self.__OUTPUT_FILE = "log/output.wav"
+        self.__OUTPUT_FILE = "./temp/tts_output.wav"
         self.text = None
         self.result = True
 
     async def __run(self) -> None:
-        communicate = edge_tts.Communicate(self.text, self.__VOICE)
+        communicate = edge_tts.Communicate(self.text, self.__VOICE, proxy='http://127.0.0.1:7890')
         await communicate.save(self.__OUTPUT_FILE.replace('wav', 'mp3'))
     
     def __speak(self) -> None:

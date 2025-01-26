@@ -78,7 +78,7 @@ def get_audio_output_devices_index():
         if device.get('maxOutputChannels') > 0:
             print(device.get('index'),device.get('name'))
 
-def play_audio(file_path:str = './log/output.wav'):
+def play_audio(file_path:str = './temp/tts_output.wav'):
     wf = wave.open(file_path, 'rb')
     p = pyaudio.PyAudio()
 
