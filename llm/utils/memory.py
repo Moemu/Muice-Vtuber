@@ -7,11 +7,13 @@ def generate_history(prompt: str, data_cursor, user_id: str) -> list:
     user_history = [item for item in data_cursor if item[3] == user_id]
     
     for item in data_cursor[-5:]:
-        history.append([item[4],item[5]])
+        history.append([item[0], item[4], item[5]])
     for item in user_history[-5:]:
-        history.append([item[4],item[5]])
+        history.append([item[0], item[4], item[5]])
 
-    # 列表去重
+    # 列表去重并根据时间戳排序
     history = [list(t) for t in set(tuple(i) for i in history)]
+    # 移除时间戳
+    history = [[item[1], item[2]] for item in history]
 
     return history
