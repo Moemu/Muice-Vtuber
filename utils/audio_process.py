@@ -16,7 +16,7 @@ class SpeechRecognitionPipeline:
         try:
             cls._model = AutoModel(
                                    model=model_path,
-                                   trust_remote_code=True,
+                                   trust_remote_code=False,
                                    device=str(device),
                                    disable_update=True
                                    )

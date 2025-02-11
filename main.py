@@ -18,6 +18,9 @@ import requests
 
 DEBUG_MODE = True
 
+import warnings
+warnings.filterwarnings("ignore", message="`torch.distributed.reduce_op` is deprecated")
+
 class App:
     def __init__(self):
         self.logger = init_logger(logging.DEBUG)
@@ -33,7 +36,7 @@ class App:
         self.queue = EventQueue()
         self.queue.leisure_task = self.leisuretask
         self.bot = BotApp(self.model)
-        self.realtime_chat = RealtimeChat(self.model, self.tts)
+        self.realtime_chat = RealtimeChat(self.model, self.tts, self.captions)
 
         self.event_handler = DanmuEventHandler(self.model, self.tts, self.captions, self.database, self.queue, self.ui)
         self.web_ui_event_handler = WebUIEventHandler(self.config, self.model, self.captions, self.queue, self.bot, self.realtime_chat)
@@ -68,7 +71,8 @@ class App:
 
     def shutdown(self, signum, frame):
         self.model.is_running = False
-        self.queue.stop()
+        if self.queue.is_running:
+            self.queue.stop()
         self.danmu.close_client()
         self.captions.disconnect()
         self.ui.app.shutdown()
