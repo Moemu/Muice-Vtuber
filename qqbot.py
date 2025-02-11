@@ -222,7 +222,7 @@ class BotApp:
         config = Config()
         intents = botpy.Intents(public_guild_messages=True, guilds=True, guild_message_reactions=True, guild_members=True, interaction=True)
         self.client = MyClient(self.model, intents=intents, log_level=20, log_format="[%(levelname)s/%(name)s] %(message)s", ext_handlers=DEFAULT_FILE_HANDLER)
-        asyncio.create_task(self.client.start(appid=config.BOT_APPID, secret=config.BOT_SECRET))
+        asyncio.run(self.client.start(appid=config.BOT_APPID, secret=config.BOT_SECRET))
         self.is_started = True
 
     def LiveStartNotification(self):
@@ -236,5 +236,9 @@ class BotApp:
 
 
 if __name__ == '__main__':
-    app = BotApp()
+    from llm.spark import llm
+    model = llm()
+    config = Config()
+    model.load(config.LLM_MODEL_PATH, config.LLM_ADAPTER_PATH, config.LLM_SYSTEM_PROMPT, config.LLM_AUTO_SYSTEM_PROMPT, config.LLM_EXTRA_ARGS)
+    app = BotApp(model)
     app.start()

@@ -25,6 +25,9 @@ class llm(BasicModel):
     def __on_message(self, ws, message):
         response = json.loads(message)
         logger.debug(f"Spark返回数据: {response}")
+        if response['header']['code'] != 0: # 不合规时该值为10013
+            logger.warning(f"调用Spark在线模型时发生错误: {response['header']['message']}")
+            ws.close()
         if response['header']['status'] in [0, 1, 2] and response['payload']['choices']['text'][0]['content'] != ' ':
             self.response += response['payload']['choices']['text'][0]['content']
         if response['header']['status'] == 2:
