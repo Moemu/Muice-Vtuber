@@ -17,6 +17,10 @@ class DanmuHandler(blivedm.BaseHandler):
         # logger.debug(f"心跳: {message}")
         pass
 
+    def _on_open_live_enter_room(self, client: blivedm.OpenLiveClient, message: open_models.RoomEnterMessage):
+        """进入房间"""
+        self.EventHandler.EnterRoomEvent(message)
+
     def _on_open_live_danmaku(self, client: blivedm.OpenLiveClient, message: open_models.DanmakuMessage):
         self.EventHandler.DanmuEvent(message)
 
