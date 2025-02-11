@@ -26,6 +26,9 @@ class BasicTask:
         self.database = database
         self.data = data
 
-    def run():
+    def __lt__(self, other):
+        return id(self) < id(other)
+    
+    def run(self):
         '''基本任务运行入口'''
         pass
