@@ -6,7 +6,7 @@ class BasicModel:
     def __init__(self):
         self.is_running = False
 
-    def load(self, model_path:str, adapter_path:str, system_prompt:str, auto_system_prompt:bool, extra_args:dict):
+    def load(self, model_config:dict):
         '''加载模型'''
         pass
 

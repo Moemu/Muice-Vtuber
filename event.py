@@ -200,7 +200,7 @@ class WebUIEventHandler:
             return False
         try:
             logger.info(f"加载模型：{self.config.LLM_MODEL_LOADER}")
-            self.model.load(self.config.LLM_MODEL_PATH, self.config.LLM_ADAPTER_PATH, self.config.LLM_SYSTEM_PROMPT, self.config.LLM_AUTO_SYSTEM_PROMPT, self.config.LLM_EXTRA_ARGS)
+            self.model.load(self.config.LLM_MODEL_CONFIG)
             self.webui.change_LLM_status(1) if self.model.is_running else self.webui.change_LLM_status(0)
         except:
             self.webui.ui.notify('无法连接至LLM',type='negative')
@@ -280,6 +280,7 @@ class DanmuEventHandler:
         '''Blivedm退出'''
         self.quene.stop()
         self.ui.change_all_status(0)
+        self.ui.change_blivedm_status(0)
         logger.info('事件处理已暂停')
 
     def DanmuEvent(self, danmu:DanmakuMessage):

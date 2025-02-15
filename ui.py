@@ -43,7 +43,7 @@ class WebUI:
             tab_start = ui.tab("开始")
             tab_danmu = ui.tab("弹幕")
             tab_control = ui.tab("控制台")
-            tab_setting = ui.tab("设置")
+            # tab_setting = ui.tab("设置")
 
         with ui.tab_panels(tabs, value=tab_start).classes('w-full'):
             with ui.tab_panel(tab_start):
@@ -106,19 +106,19 @@ class WebUI:
             with ui.tab_panel(tab_control):
                 ui_log = ui.log().classes("w-full overflow-auto",replace='').style("height: 50rem")
 
-            with ui.tab_panel(tab_setting):
-                with ui.row():
-                    with ui.card().classes('w-50'):
-                        ui.label("B站弹幕监听")
-                        ui.input(label='ACCESS_KEY_ID', value=config.DANMU_ACCESS_KEY_ID, on_change=lambda e: config.save("DANMU_ACCESS_KEY_ID", e.value)).classes('w-64')
-                        ui.input(label='ACCESS_KEY_SECRET', value=config.DANMU_ACCESS_KEY_SECRET, on_change=lambda e: config.save("DANMU_ACCESS_KEY_SECRET", e.value)).classes('w-64')
-                        ui.input(label='APP_ID', value=config.DANMU_APP_ID, on_change=lambda e: config.save("DANMU_APP_ID", e.value)).classes('w-64')
-                        ui.input(label='ROOM_OWNER_AUTH_CODE', value=config.DANMU_ROOM_OWNER_AUTH_CODE, on_change=lambda e: config.save("DANMU_ROOM_OWNER_AUTH_CODE", e.value)).classes('w-64')
-                    with ui.card():
-                        ui.label("LLM类")
-                        ui.select(label="MODEL_LOADER", options=["api","llmtuner","transformers","spark"], with_input=True, value=config.LLM_MODEL_LOADER, on_change=lambda e: config.save("LLM_MODEL_LOADER", e.value)).classes('w-64')
-                        ui.input(label='MODEL_PATH', value=config.LLM_MODEL_PATH, on_change=lambda e: config.save("LLM_MODEL_PATH", e.value)).classes('w-64')
-                        ui.input(label='ADAPTER_PATH', value=config.LLM_ADAPTER_PATH, on_change=lambda e: config.save("LLM_ADAPTER_PATH", e.value)).classes('w-64')
+            # with ui.tab_panel(tab_setting):
+            #     with ui.row():
+            #         with ui.card().classes('w-50'):
+            #             ui.label("B站弹幕监听")
+            #             ui.input(label='ACCESS_KEY_ID', value=config.DANMU_ACCESS_KEY_ID, on_change=lambda e: config.save("DANMU_ACCESS_KEY_ID", e.value)).classes('w-64')
+            #             ui.input(label='ACCESS_KEY_SECRET', value=config.DANMU_ACCESS_KEY_SECRET, on_change=lambda e: config.save("DANMU_ACCESS_KEY_SECRET", e.value)).classes('w-64')
+            #             ui.input(label='APP_ID', value=config.DANMU_APP_ID, on_change=lambda e: config.save("DANMU_APP_ID", e.value)).classes('w-64')
+            #             ui.input(label='ROOM_OWNER_AUTH_CODE', value=config.DANMU_ROOM_OWNER_AUTH_CODE, on_change=lambda e: config.save("DANMU_ROOM_OWNER_AUTH_CODE", e.value)).classes('w-64')
+            #         with ui.card():
+            #             ui.label("LLM类")
+            #             ui.select(label="MODEL_LOADER", options=["api","llmtuner","transformers","spark"], with_input=True, value=config.LLM_MODEL_LOADER, on_change=lambda e: config.save("LLM_MODEL_LOADER", e.value)).classes('w-64')
+            #             ui.input(label='MODEL_PATH', value=config.LLM_MODEL_PATH, on_change=lambda e: config.save("LLM_MODEL_PATH", e.value)).classes('w-64')
+            #             ui.input(label='ADAPTER_PATH', value=config.LLM_ADAPTER_PATH, on_change=lambda e: config.save("LLM_ADAPTER_PATH", e.value)).classes('w-64')
         
         ui.run(title="Muice Vtuber", favicon='src/favicon.png', reload=False, show=False, language='zh-CN', port=8081, show_welcome_message = False)
 
