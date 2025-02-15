@@ -34,13 +34,11 @@ class Captions:
             return False
     
     def disconnect(self) -> bool:
-        try:
-            self.captions_app.socketio.stop()
-            self.is_connecting = False
-            logger.info(f"已断开字幕服务器")
-            return True
-        except:
-            logger.info('断开失败',exc_info=True)
+        self.captions_app.socketio.stop()
+        self.is_connecting = False
+        logger.info(f"已断开字幕服务器")
+        return True
+
     
     def post(self, message:str, username:str, userface:str, respond:str, leisure:bool = False) -> bool:
         if leisure:

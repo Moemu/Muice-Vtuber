@@ -2,6 +2,7 @@ import asyncio
 import edge_tts
 import threading
 import logging
+import os
 from pydub import AudioSegment
 
 logger = logging.getLogger('Muice.TTS')
@@ -28,10 +29,17 @@ class EdgeTTS:
             return
         finally:
             loop.close()
+        
+        # 如果生成的mp3文件为空，说明出现了问题
+        if os.stat(self.__OUTPUT_FILE.replace('wav', 'mp3')).st_size == 0:
+            self.result = False
+            logger.warning("生成的TTS语音文件为空")
+            return
+        
         sound = AudioSegment.from_mp3(self.__OUTPUT_FILE.replace('wav', 'mp3'))
         sound.export(self.__OUTPUT_FILE, format="wav")
 
-    def speak(self,text) -> bool:
+    def speak(self, text) -> bool:
         self.text = text
         client_thread = threading.Thread(target=self.__speak, name='EdgeTTS_Speak', daemon=True)
         client_thread.start()
