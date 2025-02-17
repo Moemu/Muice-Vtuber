@@ -10,12 +10,10 @@ from tts import EdgeTTS
 from sqlite import Database
 from llm.utils.memory import generate_history
 from utils.utils import play_audio,Captions
-from utils.logger import init_logger
 from utils.audio_process import SpeechRecognitionPipeline
 import threading
 import pyaudio
 
-init_logger()
 logger = logging.getLogger('Muice.RealtimeChat')
 
 class RealtimeChat:
