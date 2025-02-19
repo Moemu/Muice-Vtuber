@@ -1,19 +1,16 @@
 from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage,RoomEnterMessage
-from custom_types import BasicTask, BasicModel
+from custom_types import *
 from ui import WebUI
 from llm.utils.memory import generate_history
-from tts import EdgeTTS
-from utils.utils import play_audio,Captions, get_avatar_base64, message_precheck
-from config import Config
-from sqlite import Database
-import queue,threading,time,random,sys
+from utils.utils import get_avatar_base64, message_precheck, screenshot,clean_text
+import queue,threading,time,random
 
 import logging
 logger = logging.getLogger('Muice.Event')
 
 # 任务队列
 class EventQueue:
-    def __init__(self, first_run = True) -> None:
+    def __init__(self, first_run=True) -> None:
         self.queue = queue.PriorityQueue(maxsize=5)
         self.threading = threading.Thread(target=self.__run, name='EventQueue', daemon=True)
         self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
@@ -33,15 +30,25 @@ class EventQueue:
                 task_class.run()
             except queue.Empty:
                 if not self.timer.is_alive():
-                    sec = random.randint(50, 90)
-                    logger.info(f'下一个闲时任务将在 {sec} 秒后启动')
-                    self.timer = threading.Timer(sec, self.__create_a_leisure_task, ())
-                    self.timer.start()
+                    if random.random() < 0.15:
+                        sec = random.randint(50, 90)
+                        logger.info(f'下一个读屏任务将在 {sec} 秒后启动')
+                        self.timer = threading.Timer(sec, self.__create_a_read_screen_task, ())
+                        self.timer.start()
+                    else:
+                        sec = random.randint(50, 90)
+                        logger.info(f'下一个闲时任务将在 {sec} 秒后启动')
+                        self.timer = threading.Timer(sec, self.__create_a_leisure_task, ())
+                        self.timer.start()
                 time.sleep(0.5)
     
     def __create_a_leisure_task(self):
         logger.info('发布了一个闲时任务...')
         self.put(10, self.leisure_task)
+
+    def __create_a_read_screen_task(self):
+        logger.info('发布了一个读屏任务...')
+        self.put(10, ReadScreenTask(self.leisure_task.resource_hub, {}))
 
     def put(self, priority:int, event):
         priority += self.task_index
@@ -65,26 +72,25 @@ class EventQueue:
         self.is_running = False
         self.first_run = False
         self.timer.cancel()
-        self.threading.join()
+        if threading.current_thread() is not self.threading:
+            self.threading.join()
         logger.info('事件队列已停止')
 
 
 class DanmuTask(BasicTask):
     '''弹幕任务'''
     def run(self):
-        database_history = self.database.get_history()
         logger.info(f'[{self.data["username"]}]：{self.data["message"]}')
+        database_history = self.database.get_history()
         history = generate_history(self.data['message'], database_history, self.data['userid'])
-        logger.info(f'[{self.data["username"]}] 获取到的历史记录: {history}')
-        respond = self.model.ask(self.data['message'], history=history)
-        if not respond:
-            respond = '(已过滤)'
+        logger.debug(f'[{self.data["username"]}] 获取到的历史记录: {history}')
+        respond = self.model.ask(self.data['message'], history=history) or '(已过滤)'
+        respond = respond.replace('<USERNAME>', self.data['username'])
         logger.info(f'[{self.data["username"]}] {self.data["message"]} -> {respond}')
         logger.info(f'[{self.data["username"]}] TTS处理...')
-        if not self.tts.speak(respond):
-            return
+        if not self.tts.generate_tts(respond): return
         self.captions.post(self.data['message'], self.data['username'], self.data['userface'], respond)
-        play_audio()
+        self.tts.play_audio()
         self.database.add_item(self.data['username'], self.data['userid'], self.data['message'], respond)
         logger.info(f'[{self.data["username"]}] 事件处理结束')
 
@@ -95,10 +101,9 @@ class GiftTask(BasicTask):
         respond = f"感谢 {self.data['username']} 赠送的 {self.data['gift_name']} 喵，雪雪最喜欢你了喵！"
         logger.info(f'[{self.data["username"]}] {self.data["gift_name"]} -> {respond}')
         logger.info(f'[{self.data["username"]}] TTS处理...')
-        if not self.tts.speak(respond):
-            return
-        self.captions.post('', '', '', respond)
-        play_audio()
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
         self.database.add_gift(self.data['username'], self.data['userid'], self.data['gift_name'], self.data['total_value'])
         logger.info(f'[{self.data["username"]}] 事件处理结束')
 
@@ -108,14 +113,13 @@ class SuperChatTask(BasicTask):
         logger.info(f'[{self.data["username"]}] 赠送了 ¥{self.data["rmb"]} 醒目留言：{self.data["message"]}')
         database_history = self.database.get_history()
         history = generate_history(self.data['message'], database_history, self.data['userid'])
-        model_output = self.model.ask(self.data['message'], history=history)
+        model_output = self.model.ask(self.data['message'], history=history) or '(已过滤)'
         respond = f"感谢 {self.data['username']} 的SuperChat。\n" + model_output
         logger.info(f'[{self.data["username"]}] 醒目留言 -> {respond}')
         logger.info(f'[{self.data["username"]}] TTS处理...')
-        if not self.tts.speak(respond):
-            return
+        if not self.tts.generate_tts(respond): return
         self.captions.post(self.data['message'], self.data['username'], self.data['userface'], respond)
-        play_audio()
+        self.tts.play_audio()
         self.database.add_item(self.data['username'], self.data['userid'], f'(¥{self.data["rmb"]}醒目留言)' + self.data['message'], model_output)
         logger.info(f'[{self.data["username"]}] 事件处理结束')
 
@@ -125,10 +129,9 @@ class BuyGuardTask(BasicTask):
         logger.info(f'{self.data["username"]} 购买了大航海等级 {self.data["guard_level"]}')
         respond = f'感谢 {self.data["username"]} 的舰长喵！会有什么神奇的事情发生呢？'
         logger.info(f'{self.data["username"]} TTS处理...')
-        if not self.tts.speak(respond):
-            return
-        self.captions.post('', '', '', respond)
-        play_audio()
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
         self.database.add_gift(self.data['username'], self.data['userid'], f'大航海等级{self.data["guard_level"]}', self.data['price'])
         logger.info(f'[{self.data["username"]}] 事件处理结束')
 
@@ -137,37 +140,85 @@ class LeisureTask(BasicTask):
         # history = self.database.get_history()
         active_prompts = ['<生成推文: 胡思乱想>', '<生成推文: AI生活>', '<生成推文: AI思考>', '<生成推文: 表达爱意>', '<生成推文: 情感建议>']
         LeisurePrompt = random.choice(active_prompts)
-        respond = self.model.ask(LeisurePrompt, history=[])
+        respond = self.leisure_model.ask(LeisurePrompt, history=[])
         self.database.add_item('闲时任务', '0', LeisurePrompt, respond)
-        if not self.tts.speak(respond):
-            return
-        self.captions.post('', '', '', respond, leisure=True)
-        play_audio()
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
 
 class EnterRoomTask(BasicTask):
     def run(self):
         logger.info(f'{self.data["username"]} 进入房间')
         respond = f"欢迎 {self.data['username']} 进入到直播间喵"
         logger.info(f'{self.data["username"]} TTS处理...')
-        if not self.tts.speak(respond):
-            return
-        self.captions.post('', '', '', respond)
-        play_audio()
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
         logger.info(f'[{self.data["username"]}] 事件处理结束')
+
+class RefreshTask(BasicTask):
+    def run(self):
+        logger.info(f'{self.data["username"]} 请求刷新')
+        database_history = self.database.get_history()
+        temp = database_history[-1]
+        history = generate_history(self.data['message'], database_history, self.data['userid'], user_only=True)
+        logger.debug(f'获取到的历史记录: {history}')
+        prompt = history[-1][0]
+        history = history[:-1]
+        respond = self.model.ask(prompt, history=history) or '(已过滤)'
+        logger.info(f'[{self.data["username"]}] {prompt} -> {respond}')
+        logger.info(f'[{self.data["username"]}] TTS处理...')
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(prompt, self.data['username'], self.data['userface'], respond)
+        self.tts.play_audio()
+        self.database.remove_last_item(self.data['userid'])
+        self.database.add_item(self.data['username'], self.data['userid'], prompt, respond)
+        logger.info(f'[{self.data["username"]}] 事件处理结束')
+
+class CleanMemoryTask(BasicTask):
+    def run(self):
+        logger.info(f'{self.data["username"]} 请求清空对话历史')
+        self.database.unavailable_item(self.data['userid'])
+        logger.info(f'{self.data["username"]} 对话历史已清空')
+        respond = '对话历史已清空'
+        logger.info(f'{self.data["username"]} TTS处理...')
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
+        logger.info(f'[{self.data["username"]}] 事件处理结束')
+
+class ReadScreenTask(BasicTask):
+    def run(self):
+        logger.info('[读屏任务] 开始读取屏幕')
+        respond = '你在干什么呢...'
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
+        screenshot()
+        image_info = self.multimodal.query_image('./temp/screenshot.png')
+        respond = self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}', history=[]) or '(已过滤)'
+        logger.info(f'[读屏任务] <读屏任务-沐沐的屏幕内容: {image_info}> -> {respond}')
+        logger.info(f'[读屏任务] TTS处理...')
+        if not self.tts.generate_tts(respond): return
+        self.captions.post(respond=respond)
+        self.tts.play_audio()
+        self.database.add_item('Muice', '0', f'<读屏任务-沐沐的屏幕内容: {image_info}>', respond)
+        logger.info(f'[读屏任务] 事件处理结束')
 
 # WebUI事件处理(总事件处理)
 class WebUIEventHandler:
-    def __init__(self, config: Config, model: BasicModel, captions:Captions, eventqueue:EventQueue, bot, realtimechat, webui = None, danmu = None, test = None) -> None:
-        self.config = config
-        self.model = model
+    # def __init__(self, config: Config, model: BasicModel, captions:Captions, eventqueue:EventQueue, bot, realtimechat, webui = None, danmu = None, test = None) -> None:
+    def __init__(self, resource_hub: ResourceHub, webui:WebUI, danmu, queue, realtimechat, test = None) -> None:
+        self.config = resource_hub.config
+        self.model = resource_hub.model
         self.webui = webui
         self.danmu = danmu
-        self.captions = captions
-        self.queue = eventqueue
-        self.bot = bot
+        self.captions = resource_hub.captions
+        self.queue = queue
+        # self.bot = resource_hub.bot
         self.realtimechat = realtimechat
         self.test = test
-        self.model = model
+        self.model = resource_hub.model
         self.chat_history = []
 
     async def start_all(self):
@@ -227,16 +278,16 @@ class WebUIEventHandler:
         else:
             self.webui.ui.notify('无法连接至字幕组件',type='negative')
 
-    def start_bot(self):
-        if self.webui.status.bot:
-            self.webui.ui.notify('不能重复连接！',type='negative')
-            return False
-        self.bot.start()
-        self.webui.change_bot_status(1)
+    # def start_bot(self):
+    #     if self.webui.status.bot:
+    #         self.webui.ui.notify('不能重复连接！',type='negative')
+    #         return False
+    #     self.bot.start()
+    #     self.webui.change_bot_status(1)
 
-    def chat_with_LLM(self,prompt):
+    def chat_with_LLM(self, prompt):
         if self.webui.LLM_status:
-            respond = self.model.ask(prompt,self.chat_history)
+            respond = self.model.ask(prompt, history=[]) or '(已过滤)'
             self.chat_history.append([prompt,respond])
             return respond
         else:
@@ -268,12 +319,13 @@ class WebUIEventHandler:
 
 # 弹幕事件处理分发
 class DanmuEventHandler:
-    def __init__(self, model:BasicModel, tts:EdgeTTS, captions:Captions, database:Database, eventquene:EventQueue, ui:WebUI = None) -> None:
-        self.model = model
-        self.tts = tts
-        self.captions = captions
-        self.database = database
-        self.quene = eventquene
+    def __init__(self, resource_hub:ResourceHub, quene, ui:WebUI = None) -> None:
+        self.resource_hub = resource_hub
+        self.model = resource_hub.model
+        self.tts = resource_hub.tts
+        self.captions = resource_hub.captions
+        self.database = resource_hub.database
+        self.quene = quene
         self.ui = ui
 
     def shutdown(self):
@@ -294,7 +346,17 @@ class DanmuEventHandler:
             return
         userface = get_avatar_base64(userface + '@250x250')
         data = {'message': message, 'username': username, 'userface': f'data:image/png;base64,' + userface, 'userid': userid}
-        task = DanmuTask(self.model, self.tts, self.captions, self.database, data)
+        if message.startswith('刷新'):
+            data = {'message': message, 'username': username, 'userface': userface, 'userid': userid}
+            task = RefreshTask(self.resource_hub, data)
+            self.quene.put(10, task)
+            return
+        if message.startswith('清空对话历史'):
+            data = {'message': message, 'username': username, 'userface': userface, 'userid': userid}
+            task = CleanMemoryTask(self.resource_hub, data)
+            self.quene.put(10, task)
+            return
+        task = DanmuTask(self.resource_hub, data)
         self.quene.put(5, task)
 
     def GiftEvent(self, gift:GiftMessage):
@@ -305,7 +367,7 @@ class DanmuEventHandler:
         gift_name = gift.gift_name
         total_value = gift.price * gift.gift_num / 1000
         data = {'username': username, 'userid': userid, 'gift_name': gift_name, 'gift_num': gift.gift_num, 'total_value': total_value}
-        task = GiftTask(self.model, self.tts, self.captions, self.database, data)
+        task = GiftTask(self.resource_hub, data)
         self.quene.put(3, task)
 
     def SuperChatEvent(self, superchat:SuperChatMessage):
@@ -316,7 +378,7 @@ class DanmuEventHandler:
         rmb = superchat.rmb
         userface = get_avatar_base64(userface + '@250x250')
         data = {'username': username, 'userid': userid, 'userface': f'data:image/png;base64,' + userface, 'message': message, 'rmb': rmb}
-        task = SuperChatTask(self.model, self.tts, self.captions, self.database, data)
+        task = SuperChatTask(self.resource_hub, data)
         self.quene.put(1, task)
 
     def GuardBuyEvent(self, message:GuardBuyMessage):
@@ -325,11 +387,11 @@ class DanmuEventHandler:
         guard_level = message.guard_level
         price = message.price / 1000
         data = {'username': username, 'userid': userid, 'guard_level': guard_level, 'price': price}
-        task = BuyGuardTask(self.model, self.tts, self.captions, self.database, data)
+        task = BuyGuardTask(self.resource_hub, data)
         self.quene.put(1, task)
 
     def EnterRoomEvent(self, message:RoomEnterMessage):
         username = message.uname
         data = {'username': username}
-        task = EnterRoomTask(self.model, self.tts, self.captions, self.database, data)
+        task = EnterRoomTask(self.resource_hub, data)
         self.quene.put(10, task)

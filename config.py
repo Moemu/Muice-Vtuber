@@ -14,9 +14,15 @@ class Config:
         self.DANMU_ROOM_OWNER_AUTH_CODE = self.config['danmu']['room_owner_auth_code']
         self.LLM_MODEL_CONFIG = self.config['model']
         self.LLM_MODEL_LOADER = self.config['model']['loader']
+        self.LEISURE_MODEL_LOADER = self.config['leisure_model']['loader']
+        self.LEISURE_MODEL_CONFIG = self.config['leisure_model']
+        self.MULTIMODAL_MODEL_LOADER = self.config['multimodal']['loader']
+        self.MULTIMODAL_MODEL_CONFIG = self.config['multimodal']
         self.BOT_APPID = self.config['bot']['appid']
         self.BOT_TOKEN = self.config['bot']['token']
         self.BOT_SECRET = self.config['bot']['secret']
+        self.TTS_LOADER = self.config['tts']['loader']
+        self.TTS_CONFIG = self.config['tts']
 
     def save(self, key:str, value:str) -> None:
         self.config[key] = value

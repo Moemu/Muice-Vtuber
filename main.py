@@ -1,22 +1,16 @@
 from event import DanmuEventHandler, WebUIEventHandler, EventQueue, LeisureTask
-from tts import EdgeTTS
 from danmu import Danmu, DanmuHandler
-from config import Config
 from ui import WebUI
-from utils.utils import Captions
 from test import Test
-from sqlite import Database
 from utils.logger import init_logger
-from qqbot import BotApp
+from custom_types import *
+# from qqbot import BotApp
 from realtime_chat import RealtimeChat
 import signal
 import logging
-import importlib
 import sys
 import threading
-import requests
-
-DEBUG_MODE = True
+# import requests
 
 import warnings
 warnings.filterwarnings("ignore", message="`torch.distributed.reduce_op` is deprecated")
@@ -25,26 +19,18 @@ class App:
     def __init__(self):
         self.logger = init_logger(logging.DEBUG)
         self.logger.info('初始化应用程序...')
-
-        self.config = Config()
-        self.tts = EdgeTTS()
         self.ui = WebUI()
-        self.model = importlib.import_module(f"llm.{self.config.LLM_MODEL_LOADER}").llm()
-        self.captions = Captions()
-        self.database = Database()
-        self.leisuretask = LeisureTask(self.model, self.tts, self.captions, self.database)
+        self.resource_hub = ResourceHub.load_resource()
+        self.leisuretask = LeisureTask(self.resource_hub)
         self.queue = EventQueue()
         self.queue.leisure_task = self.leisuretask
-        self.bot = BotApp(self.model)
-        self.realtime_chat = RealtimeChat(self.model, self.tts, self.captions)
-
-        self.event_handler = DanmuEventHandler(self.model, self.tts, self.captions, self.database, self.queue, self.ui)
-        self.web_ui_event_handler = WebUIEventHandler(self.config, self.model, self.captions, self.queue, self.bot, self.realtime_chat)
+        # self.bot = BotApp(self.model)
+        self.realtime_chat = RealtimeChat(self.resource_hub)
+        self.event_handler = DanmuEventHandler(self.resource_hub, self.queue, self.ui)
         self.danmu_handler = DanmuHandler(self.event_handler)
+        self.danmu = Danmu(self.resource_hub, self.danmu_handler, self.ui)
+        self.web_ui_event_handler = WebUIEventHandler(self.resource_hub, self.ui, self.danmu, self.queue, self.realtime_chat)
         self.test = Test(self.event_handler)
-
-        self.danmu = Danmu(self.config, self.danmu_handler)
-
         self.ui.action = self.web_ui_event_handler
         self.danmu.webui = self.ui
         self.web_ui_event_handler.webui = self.ui
@@ -66,15 +52,15 @@ class App:
         self.queue.stop()
         self.danmu.close_client()
         self.logger.warning(f"消息处理已暂停，blivedm已安全断开")
-        if self.bot.is_started:
-            requests.post('http://localhost:8083/live_error')
+        # if self.bot.is_started:
+        #     requests.post('http://localhost:8083/live_error')
 
     def shutdown(self, signum, frame):
-        self.model.is_running = False
+        self.resource_hub.model.is_running = False
         if self.queue.is_running:
             self.queue.stop()
         self.danmu.close_client()
-        self.captions.disconnect()
+        self.resource_hub.captions.disconnect()
         self.ui.app.shutdown()
         sys.exit(0)
 

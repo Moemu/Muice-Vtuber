@@ -36,8 +36,8 @@ class DanmuHandler(blivedm.BaseHandler):
         self.EventHandler.SuperChatEvent(message)
 
 class Danmu:
-    def __init__(self,config,danmuhandler,webui = None):
-        self.config = config
+    def __init__(self, resource_hub, danmuhandler, webui = None):
+        self.config = resource_hub.config
         self.__client_process = False
         self.loop = None
         self.handler = danmuhandler

@@ -1,5 +1,6 @@
 import dashscope
 import logging
+import pathlib
 from llm.utils.auto_system_prompt import auto_system_prompt
 
 logger = logging.getLogger('Muice')
@@ -40,3 +41,17 @@ class llm:
         )
 
         return response.output.text
+
+    
+    def query_image(self, image_path: str) -> str:
+        if not (image_path.startswith("http") or image_path.startswith("file")):
+            abs_path = pathlib.Path(image_path).resolve()
+            image_path = abs_path.as_uri()
+            image_path = image_path.replace("file:///", "file://")
+        message = [{"role": "user", "content": [{'image': image_path}, {'text': '描述图片'}]}]
+        response = dashscope.MultiModalConversation.call(
+            api_key=self.api_key,
+            model=self.model,
+            messages=message
+        )
+        return response["output"]["choices"][0]["message"].content[0]["text"]

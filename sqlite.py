@@ -34,7 +34,8 @@ class Database:
             USERNAME TEXT NOT NULL,
             USERID TEXT NOT NULL,
             DANMU TEXT NOT NULL,
-            RESPOND TEXT NOT NULL);''')
+            RESPOND TEXT NOT NULL,
+            AVAILABLE INT NOT NULL);''')
         self.__execute('''CREATE TABLE GIFT(
             ID INT PRIMARY KEY NOT NULL,
             TIME TEXT NOT NULL,
@@ -62,6 +63,14 @@ class Database:
                    VALUES (?, ?, ?, ?, ?, ?)'''
         self.__execute(query, (available_id, current_time, username, userid, giftname, totalprice))
         
+    def unavailable_item(self, userid:str):
+        query = "UPDATE CHAT SET AVAILABLE = 0 WHERE USERID = ?"
+        self.__execute(query, (userid,))
+
     def get_history(self) -> list:
-        query = "SELECT * FROM CHAT"
+        query = "SELECT * FROM CHAT WHERE AVAILABLE = 1"
         return self.__execute(query, fetchall=True)
+
+    def remove_last_item(self, userid:str):
+        query = "DELETE FROM CHAT WHERE ID = (SELECT ID FROM CHAT WHERE USERID = ? ORDER BY ID DESC LIMIT 1)"
+        self.__execute(query, (userid,))

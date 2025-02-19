@@ -14,7 +14,7 @@ from time import mktime
 from urllib.parse import urlencode
 from wsgiref.handlers import format_date_time
 
-logger = logging.getLogger('Muice')
+logger = logging.getLogger('Muice.LLM.xfyun')
 
 class llm:
     """

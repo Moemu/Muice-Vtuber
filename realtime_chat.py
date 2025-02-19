@@ -1,15 +1,12 @@
-import numpy as np
 import wave
 import logging
 import os
 import keyboard
 import asyncio
 from config import Config
-from custom_types import BasicModel
-from tts import EdgeTTS
+from custom_types import *
 from sqlite import Database
 from llm.utils.memory import generate_history
-from utils.utils import play_audio,Captions
 from utils.audio_process import SpeechRecognitionPipeline
 import threading
 import pyaudio
@@ -17,7 +14,7 @@ import pyaudio
 logger = logging.getLogger('Muice.RealtimeChat')
 
 class RealtimeChat:
-    def __init__(self, model: BasicModel, tts: EdgeTTS, caption: Captions = None):
+    def __init__(self, resource_hub: ResourceHub):
         self.CHUNK = 2048  # 每次读取的音频块大小
         self.FORMAT = pyaudio.paInt32  # 音频格式
         self.CHANNELS = 2  # 声道数
@@ -32,9 +29,9 @@ class RealtimeChat:
         self.configs = Config().config
         self.audio_name_or_path = self.configs['realtime']['path']
         self.database = Database()
-        self.model = model
-        self.tts = tts
-        self.caption = caption
+        self.model = resource_hub.model
+        self.tts = resource_hub.tts
+        self.caption = resource_hub.captions
         self.is_recording = False
         self.model_status = False
         self.first_run = True
@@ -105,7 +102,7 @@ class RealtimeChat:
         logger.info(f"回复消息：{reply}")
         try:
             if self.tts.speak(reply):
-                play_audio()
+                self.tts.play_audio()
         except Exception as e:
             logger.error(f"播放语音文件失败: {e}")
         logger.info("当前对话结束.")
@@ -132,16 +129,3 @@ class RealtimeChat:
         keyboard.remove_hotkey('ctrl+alt+c')
         if self.is_recording:
             self.stop_record()
-        
-
-if __name__ == '__main__':
-    from llm import spark
-    from tts import EdgeTTS
-    model = spark.llm()
-    tts = EdgeTTS()
-    config = Config()
-    model.load(config.LLM_MODEL_PATH, config.LLM_ADAPTER_PATH, config.LLM_SYSTEM_PROMPT, config.LLM_AUTO_SYSTEM_PROMPT, config.LLM_EXTRA_ARGS)
-    chat = RealtimeChat(model, tts)
-    chat.register_keyboard()
-    logger.info("实时聊天已启动，按下Ctrl+Alt+C开始/结束录音")
-    keyboard.wait()

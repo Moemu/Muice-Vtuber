@@ -3,12 +3,13 @@ import os
 import asyncio
 import shlex
 import pyaudio
-import wave
 import requests
 import base64
 import emoji
 import threading
 import logging
+import pyautogui
+import re
 from captions.app import Captions as Captions_app
 
 logger = logging.getLogger('Muice.Utils')
@@ -40,12 +41,9 @@ class Captions:
         return True
 
     
-    def post(self, message:str, username:str, userface:str, respond:str, leisure:bool = False) -> bool:
-        if leisure:
-            data = {'user':'', 'avatar':'', 'message':'', 'respond':respond}
-        else:
-            data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
-        result = requests.post(self.captions_server, json = data)
+    def post(self, message:str = '', username:str = '', userface:str = '', respond:str = '') -> bool:
+        data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+        result = requests.post(self.captions_server, json=data)
         if result.status_code == 200:
             return True
 
@@ -76,29 +74,6 @@ def get_audio_output_devices_index():
         if device.get('maxOutputChannels') > 0:
             print(device.get('index'),device.get('name'))
 
-def play_audio(file_path:str = './temp/tts_output.wav'):
-    wf = wave.open(file_path, 'rb')
-    p = pyaudio.PyAudio()
-
-    # 打开音频流
-    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                    channels=wf.getnchannels(),
-                    rate=wf.getframerate(),
-                    output=True,
-                    output_device_index=7)
-
-    # 读取音频文件并播放
-    data = wf.readframes(1024)
-    while data:
-        stream.write(data)
-        data = wf.readframes(1024)
-
-    # 停止并关闭流
-    stream.stop_stream()
-    stream.close()
-    wf.close()
-    p.terminate()
-
 def get_avatar_base64(url:str) -> str:
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     return base64.b64encode(response.content).decode("ascii")
@@ -115,3 +90,20 @@ def message_precheck(message:str) -> bool:
         return False
     # 前缀检测
     return not (message.startswith('＃') or message.startswith('#'))
+
+def screenshot():
+    return pyautogui.screenshot('./temp/screenshot.png')
+
+def clean_text(text: str) -> str:
+    # 定义常见的标点符号
+    common_punctuation = r"[.,!?;:()[]{}\"'，。！？；：]"
+    # 使用正则表达式去除表情符号和特殊字符
+    # 这里的正则表达式去除掉所有非字母、非数字、非常见标点符号的字符
+    # text = re.sub(r"[^\w\s" + common_punctuation + "]", "", text)
+    # 移除表情
+    text = re.sub(r"（[^）]*）", "", text)
+    # 移除表情符号 (通过Unicode范围来过滤)
+    text = re.sub(r"[^\x00-\x7F\u4e00-\u9fa5]+", "", text)
+    text = text.replace('www', '')
+    text = text.replace('qwq', '')
+    return text
