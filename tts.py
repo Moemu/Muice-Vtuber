@@ -12,7 +12,6 @@ logger = logging.getLogger('Muice.TTS')
 
 class EdgeTTS(BasicTTS):
     def __init__(self, config:dict) -> None:
-        super().__init__(config)
         self.__VOICE = "zh-CN-XiaoyiNeural"
         self.__OUTPUT_FILE = "./temp/tts_output.wav"
         self.text = None
