@@ -74,13 +74,13 @@ class RealtimeChat:
 
     def record(self):
         """ 录音逻辑，运行在独立线程 """
-        while self.is_recording:
+        while self.is_recording and self.stream:
             data = self.stream.read(self.CHUNK)
             self.frames.append(data)
         logger.info("录音线程结束")
         
     def stop_record(self):
-        if self.is_recording:
+        if self.is_recording and self.stream:
             self.is_recording = False
             self.recording_thread.join()
 
@@ -92,7 +92,7 @@ class RealtimeChat:
     async def generate_reply(self):
         logger.info(f"已保存音频文件，开始语音处理")
         message = await SpeechRecognitionPipeline().generate_speech("./temp/stt_output.wav") # 语音识别输出用户Prompt
-        if len(message) < 2:
+        if not message or len(message) < 2:
             return
         os.remove("./temp/stt_output.wav")
         memory = generate_history(message, self.database.get_history(), '<RealtimeChat>')
@@ -101,15 +101,17 @@ class RealtimeChat:
         self.caption.post(message, '沐沐', '', reply)
         logger.info(f"回复消息：{reply}")
         try:
-            if self.tts.speak(reply):
+            if self.tts.generate_tts(reply):
                 self.tts.play_audio()
         except Exception as e:
             logger.error(f"播放语音文件失败: {e}")
         logger.info("当前对话结束.")
         
         logger.info("录音结束.")
-        self.stream.stop_stream()
-        self.stream.close()
+        if self.stream:
+            self.stream.stop_stream()
+            self.stream.close()
+
         # self.p.terminate()
 
     def toggle_recording(self):

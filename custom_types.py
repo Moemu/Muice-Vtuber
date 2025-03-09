@@ -26,7 +26,7 @@ class BasicModel:
         """
         查询图片
         """
-        pass
+        raise NotImplementedError("当前模型不支持图片识别！")
 
 
 class BasicTTS:

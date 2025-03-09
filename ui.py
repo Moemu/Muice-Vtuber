@@ -9,20 +9,20 @@ logger = logging.getLogger(__name__)
 class WebUI:
 
     class label:
-        all:ui.label = None
-        llm:ui.label = None
-        blivedm:ui.label = None
-        captions:ui.label = None
-        bot:ui.label = None
-        realtime_chat:ui.label = None
+        all:ui.label
+        llm:ui.label
+        blivedm:ui.label
+        captions:ui.label
+        bot:ui.label
+        realtime_chat:ui.label
 
     class icon:
-        all:ui.label = None
-        llm:ui.icon = None
-        blivedm:ui.icon = None
-        captions:ui.label = None
-        bot:ui.label = None
-        realtime_chat:ui.label = None
+        all:ui.icon
+        llm:ui.icon
+        blivedm:ui.icon
+        captions:ui.icon
+        bot:ui.icon
+        realtime_chat:ui.icon
 
     class status:
         all:int = 0
@@ -32,7 +32,7 @@ class WebUI:
         bot:int = 0
         realtime_chat:int = 0
 
-    def __init__(self,WebUIEventHandler = None) -> None:
+    def __init__(self, WebUIEventHandler = None) -> None:
         self.ui_danmu = None
         self.action = WebUIEventHandler
         self.app = app
@@ -77,28 +77,27 @@ class WebUI:
 
                 with ui.card().classes('w-50'):
                     ui.label('总操作台').style('font-size: large')
-                    ui.button('一键启动',on_click=self.action.start_all)
-                    ui.button('开始消息处理',on_click=self.action.start_service)
-                    ui.button('终止消息处理',on_click=self.action.stop_service)    
+                    ui.button('一键启动',on_click=self.action.start_all) # type:ignore
+                    ui.button('开始消息处理',on_click=self.action.start_service) # type:ignore
+                    ui.button('终止消息处理',on_click=self.action.stop_service) # type:ignore
 
                 with ui.card().classes('w-50'):
                     ui.label('LLM操作台').style('font-size: large')
-                    ui.button('连接到LLM',on_click=self.action.connect_to_LLM)
+                    ui.button('连接到LLM',on_click=self.action.connect_to_LLM) # type:ignore
                     
                 with ui.card().classes('w-50'):
                     ui.label('弹幕控制台').style('font-size: large')
-                    ui.button('连接到blivedm',on_click=self.action.connect_to_blivedm)
-                    ui.button('取消连接',on_click=self.action.disconnect_to_blivedm)
-                    ui.button('创建一个测试弹幕事件',on_click=self.action.CreateATestDanmuEvent)
+                    ui.button('连接到blivedm',on_click=self.action.connect_to_blivedm) # type:ignore
+                    ui.button('取消连接',on_click=self.action.disconnect_to_blivedm) # type:ignore
 
                 with ui.card().classes('w-50'):
                     ui.label('字幕组件控制台').style('font-size: large')
-                    ui.button('连接到字幕组件',on_click=self.action.connect_to_captions)
+                    ui.button('连接到字幕组件',on_click=self.action.connect_to_captions) # type:ignore
 
                 with ui.card().classes('w-50'):
                     ui.label('实时对话控制').style('font-size: large')
-                    ui.button('启动实时对话',on_click=self.action.start_realtime_chat)
-                    ui.button('终止实时对话',on_click=self.action.stop_realtime_chat)                      
+                    ui.button('启动实时对话',on_click=self.action.start_realtime_chat) # type:ignore
+                    ui.button('终止实时对话',on_click=self.action.stop_realtime_chat) # type:ignore                
             
             with ui.tab_panel(tab_danmu):
                 self.ui_danmu =ui.log().classes("w-full overflow-auto").style("height: 50rem")

@@ -2,7 +2,7 @@ from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperCha
 from custom_types import *
 from ui import WebUI
 from llm.utils.memory import generate_history
-from utils.utils import get_avatar_base64, message_precheck, screenshot,clean_text
+from utils.utils import get_avatar_base64, message_precheck, screenshot
 import queue,threading,time,random
 
 import logging
@@ -15,7 +15,7 @@ class EventQueue:
         self.threading = threading.Thread(target=self.__run, name='EventQueue', daemon=True)
         self.timer = threading.Timer(60, self.__create_a_leisure_task, ())
         if first_run:
-            self.leisure_task:LeisureTask = None
+            self.leisure_task:LeisureTask|None = None
         self.is_running = False
         self.first_run = first_run
         self.task_index = 1
@@ -47,6 +47,8 @@ class EventQueue:
         self.put(10, self.leisure_task)
 
     def __create_a_read_screen_task(self):
+        if not self.leisure_task:
+            return
         logger.info('发布了一个读屏任务...')
         self.put(10, ReadScreenTask(self.leisure_task.resource_hub, {}))
 
@@ -190,13 +192,13 @@ class CleanMemoryTask(BasicTask):
 class ReadScreenTask(BasicTask):
     def run(self):
         logger.info('[读屏任务] 开始读取屏幕')
-        respond = '你在干什么呢...'
+        respond = '让我们看一下沐沐在干什么...'
         if not self.tts.generate_tts(respond): return
         self.captions.post(respond=respond)
         self.tts.play_audio()
         screenshot()
         image_info = self.multimodal.query_image('./temp/screenshot.png')
-        respond = self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}', history=[]) or '(已过滤)'
+        respond = self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}>', history=[]) or '(已过滤)'
         logger.info(f'[读屏任务] <读屏任务-沐沐的屏幕内容: {image_info}> -> {respond}')
         logger.info(f'[读屏任务] TTS处理...')
         if not self.tts.generate_tts(respond): return
@@ -207,8 +209,7 @@ class ReadScreenTask(BasicTask):
 
 # WebUI事件处理(总事件处理)
 class WebUIEventHandler:
-    # def __init__(self, config: Config, model: BasicModel, captions:Captions, eventqueue:EventQueue, bot, realtimechat, webui = None, danmu = None, test = None) -> None:
-    def __init__(self, resource_hub: ResourceHub, webui:WebUI, danmu, queue, realtimechat, test = None) -> None:
+    def __init__(self, resource_hub: ResourceHub, webui:WebUI, danmu, queue, realtimechat) -> None:
         self.config = resource_hub.config
         self.model = resource_hub.model
         self.webui = webui
@@ -217,7 +218,6 @@ class WebUIEventHandler:
         self.queue = queue
         # self.bot = resource_hub.bot
         self.realtimechat = realtimechat
-        self.test = test
         self.model = resource_hub.model
         self.chat_history = []
 
@@ -225,7 +225,6 @@ class WebUIEventHandler:
         self.connect_to_LLM()
         self.connect_to_captions()
         await self.connect_to_blivedm()
-        # self.start_bot()
         self.start_service()
     
     def start_service(self):
@@ -278,24 +277,6 @@ class WebUIEventHandler:
         else:
             self.webui.ui.notify('无法连接至字幕组件',type='negative')
 
-    # def start_bot(self):
-    #     if self.webui.status.bot:
-    #         self.webui.ui.notify('不能重复连接！',type='negative')
-    #         return False
-    #     self.bot.start()
-    #     self.webui.change_bot_status(1)
-
-    def chat_with_LLM(self, prompt):
-        if self.webui.LLM_status:
-            respond = self.model.ask(prompt, history=[]) or '(已过滤)'
-            self.chat_history.append([prompt,respond])
-            return respond
-        else:
-            self.webui.ui.notify('LLM未连接',type='warning')
-
-    def CreateATestDanmuEvent(self):
-        self.test.CreateADanmuEvent()
-
     def start_realtime_chat(self):
         if self.webui.status.realtime_chat:
             self.webui.ui.notify('不能重复启动！',type='negative')
@@ -319,7 +300,7 @@ class WebUIEventHandler:
 
 # 弹幕事件处理分发
 class DanmuEventHandler:
-    def __init__(self, resource_hub:ResourceHub, quene, ui:WebUI = None) -> None:
+    def __init__(self, resource_hub:ResourceHub, quene, ui:WebUI) -> None:
         self.resource_hub = resource_hub
         self.model = resource_hub.model
         self.tts = resource_hub.tts
@@ -336,7 +317,8 @@ class DanmuEventHandler:
         logger.info('事件处理已暂停')
 
     def DanmuEvent(self, danmu:DanmakuMessage):
-        self.ui.ui_danmu.push(f'{danmu.uname}：{danmu.msg}')
+        if self.ui.ui_danmu:
+            self.ui.ui_danmu.push(f'{danmu.uname}：{danmu.msg}')
         # self.ui.ui_danmu.push(f'醒目留言 ¥{message.rmb} {message.uname}：{message.message}')
         message = danmu.msg
         username = danmu.uname

@@ -1,7 +1,7 @@
-import sys
-import os
-import asyncio
-import shlex
+# import sys
+# import os
+# import asyncio
+# import shlex
 import pyaudio
 import requests
 import base64
@@ -35,6 +35,8 @@ class Captions:
             return False
     
     def disconnect(self) -> bool:
+        if not self.captions_app:
+            return True
         self.captions_app.socketio.stop()
         self.is_connecting = False
         logger.info(f"已断开字幕服务器")
@@ -42,36 +44,38 @@ class Captions:
 
     
     def post(self, message:str = '', username:str = '', userface:str = '', respond:str = '') -> bool:
-        data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+        # data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+        data =  {'user':username, 'avatar':userface, 'message':message, 'respond':''}
         result = requests.post(self.captions_server, json=data)
         if result.status_code == 200:
             return True
+        return False
 
 
-async def run_command(command: str, log: object, cwd: str = os.path.dirname(os.path.abspath(__file__))) -> None:
-    command = command.replace('python3', sys.executable)
-    process = await asyncio.create_subprocess_exec(
-        *shlex.split(command, posix='win' not in sys.platform.lower()),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        cwd=cwd
-    )
-    output = ""
-    while True:
-        new = await process.stdout.read(4096)
-        if not new:
-            break
-        try:
-            new_decode = new.decode('utf-8')
-        except UnicodeDecodeError:
-            new_decode = new.decode('gbk')
-        output += new_decode
-        log.push(new_decode)
+# async def run_command(command: str, log: object, cwd: str = os.path.dirname(os.path.abspath(__file__))) -> None:
+#     command = command.replace('python3', sys.executable)
+#     process = await asyncio.create_subprocess_exec(
+#         *shlex.split(command, posix='win' not in sys.platform.lower()),
+#         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+#         cwd=cwd
+#     )
+#     output = ""
+#     while True:
+#         new = await process.stdout.read(4096)
+#         if not new:
+#             break
+#         try:
+#             new_decode = new.decode('utf-8')
+#         except UnicodeDecodeError:
+#             new_decode = new.decode('gbk')
+#         output += new_decode
+#         log.push(new_decode)
 
 def get_audio_output_devices_index():
     p = pyaudio.PyAudio()
     for i in range(p.get_device_count()):
         device = p.get_device_info_by_index(i)
-        if device.get('maxOutputChannels') > 0:
+        if device.get('maxOutputChannels') > 0: # type: ignore
             print(device.get('index'),device.get('name'))
 
 def get_avatar_base64(url:str) -> str:
@@ -94,7 +98,7 @@ def message_precheck(message:str) -> bool:
 def screenshot():
     return pyautogui.screenshot('./temp/screenshot.png')
 
-def clean_text(text: str) -> str:
+def filter_emotion(text: str) -> str:
     # 定义常见的标点符号
     common_punctuation = r"[.,!?;:()[]{}\"'，。！？；：]"
     # 使用正则表达式去除表情符号和特殊字符
@@ -107,3 +111,8 @@ def clean_text(text: str) -> str:
     text = text.replace('www', '')
     text = text.replace('qwq', '')
     return text
+
+def filter_parentheses(text: str) -> str:
+    pattern = r"（.*?）"
+    clean_text = re.sub(pattern, "", text)
+    return clean_text

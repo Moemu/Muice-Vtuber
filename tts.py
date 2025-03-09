@@ -7,6 +7,7 @@ import requests
 
 from pydub import AudioSegment
 from custom_types import BasicTTS
+from utils.utils import filter_parentheses
 
 logger = logging.getLogger('Muice.TTS')
 
@@ -18,6 +19,8 @@ class EdgeTTS(BasicTTS):
         self.result = True
 
     async def __run(self) -> None:
+        if not self.text:
+            return
         communicate = edge_tts.Communicate(self.text, self.__VOICE, proxy='http://127.0.0.1:7890')
         await communicate.save(self.__OUTPUT_FILE.replace('wav', 'mp3'))
     
@@ -42,8 +45,8 @@ class EdgeTTS(BasicTTS):
         sound = AudioSegment.from_mp3(self.__OUTPUT_FILE.replace('wav', 'mp3'))
         sound.export(self.__OUTPUT_FILE, format="wav")
 
-    def generate_tts(self, text) -> bool:
-        self.text = text
+    def generate_tts(self, text:str) -> bool:
+        self.text = filter_parentheses(text)
         client_thread = threading.Thread(target=self.__speak, name='EdgeTTS_Speak', daemon=True)
         client_thread.start()
         client_thread.join()
@@ -102,7 +105,7 @@ class GPTSoVITS(BasicTTS):
         
         # 准备POST请求的参数
         payload = {
-            "text": text,
+            "text": filter_parentheses(text),
             "text_lang": text_lang,
             "ref_audio_path": ref_audio_path,
             "prompt_text": prompt_text,

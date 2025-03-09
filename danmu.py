@@ -28,7 +28,7 @@ class DanmuHandler(blivedm.BaseHandler):
         self.EventHandler.GiftEvent(message)
 
     def _on_open_live_buy_guard(self, client: blivedm.OpenLiveClient, message: open_models.GuardBuyMessage):
-        self.EventHandler.GuardEvent(message)
+        self.EventHandler.GuardBuyEvent(message)
 
     def _on_open_live_super_chat(
         self, client: blivedm.OpenLiveClient, message: open_models.SuperChatMessage
@@ -72,9 +72,11 @@ class Danmu:
     def start_client(self):
         client_thread = threading.Thread(target=self.__start_client, name='Blivedm', daemon=True)
         client_thread.start()
-        self.webui.change_blivedm_status(1)
+        if self.webui:
+            self.webui.change_blivedm_status(1)
 
     def close_client(self):
         self.__client_process = False
         time.sleep(1)
-        self.webui.change_blivedm_status(0)
+        if self.webui:
+            self.webui.change_blivedm_status(0)

@@ -1,4 +1,5 @@
 import sqlite3,os,time
+from typing import Any
 
 class Database:
     def __init__(self) -> None:
@@ -9,7 +10,7 @@ class Database:
     def __connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.DB_PATH)
     
-    def __execute(self, query:str, params=(), fetchone=False, fetchall=False):
+    def __execute(self, query:str, params=(), fetchone=False, fetchall=False) -> Any:
         '''        
         Executes a given SQL query with optional parameters.
         

@@ -1,7 +1,6 @@
 from event import DanmuEventHandler, WebUIEventHandler, EventQueue, LeisureTask
 from danmu import Danmu, DanmuHandler
 from ui import WebUI
-from test import Test
 from utils.logger import init_logger
 from custom_types import *
 # from qqbot import BotApp
@@ -24,18 +23,15 @@ class App:
         self.leisuretask = LeisureTask(self.resource_hub)
         self.queue = EventQueue()
         self.queue.leisure_task = self.leisuretask
-        # self.bot = BotApp(self.model)
         self.realtime_chat = RealtimeChat(self.resource_hub)
         self.event_handler = DanmuEventHandler(self.resource_hub, self.queue, self.ui)
         self.danmu_handler = DanmuHandler(self.event_handler)
         self.danmu = Danmu(self.resource_hub, self.danmu_handler, self.ui)
         self.web_ui_event_handler = WebUIEventHandler(self.resource_hub, self.ui, self.danmu, self.queue, self.realtime_chat)
-        self.test = Test(self.event_handler)
         self.ui.action = self.web_ui_event_handler
         self.danmu.webui = self.ui
         self.web_ui_event_handler.webui = self.ui
         self.web_ui_event_handler.danmu = self.danmu
-        self.web_ui_event_handler.test = self.test
 
         signal.signal(signal.SIGINT, self.shutdown)
         threading.excepthook = self.error

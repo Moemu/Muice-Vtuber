@@ -39,6 +39,8 @@ class SpeechRecognitionPipeline:
 
     async def generate_speech(self, file_path):
         logger.info("Generating speech...")
+        if not self._model:
+            return
         rec_result = self._model.generate(
                                           input=file_path,
                                           cache={},
