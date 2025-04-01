@@ -3,7 +3,7 @@
 # import asyncio
 # import shlex
 import pyaudio
-import requests
+import aiohttp
 import base64
 import emoji
 import threading
@@ -43,13 +43,12 @@ class Captions:
         return True
 
     
-    def post(self, message:str = '', username:str = '', userface:str = '', respond:str = '') -> bool:
-        # data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
-        data =  {'user':username, 'avatar':userface, 'message':message, 'respond':''}
-        result = requests.post(self.captions_server, json=data)
-        if result.status_code == 200:
-            return True
-        return False
+    async def post(self, message:str = '', username:str = '', userface:str = '', respond:str = '') -> bool:
+        data = {'user':username, 'avatar':userface, 'message':message, 'respond':respond}
+        # data =  {'user':username, 'avatar':userface, 'message':message, 'respond':''}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.captions_server, json=data) as response:
+                return response.ok
 
 
 # async def run_command(command: str, log: object, cwd: str = os.path.dirname(os.path.abspath(__file__))) -> None:
@@ -78,9 +77,11 @@ def get_audio_output_devices_index():
         if device.get('maxOutputChannels') > 0: # type: ignore
             print(device.get('index'),device.get('name'))
 
-def get_avatar_base64(url:str) -> str:
-    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-    return base64.b64encode(response.content).decode("ascii")
+async def get_avatar_base64(url:str) -> str:
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
+            avater_data = await response.read()
+    return base64.b64encode(avater_data).decode("ascii")
 
 def message_precheck(message:str) -> bool:
     # 纯emoji消息不发送
@@ -114,5 +115,7 @@ def filter_emotion(text: str) -> str:
 
 def filter_parentheses(text: str) -> str:
     pattern = r"（.*?）"
+    clean_text = re.sub(pattern, "", text)
+    pattern = r"\(.*?\)"
     clean_text = re.sub(pattern, "", text)
     return clean_text

@@ -1,46 +1,41 @@
 from utils.utils import Captions
-from sqlite import Database
-from config import Config
+from config import Config, get_model_config
 from abc import abstractmethod
+from llm import BasicModel
+from sqlite import Database
+from typing import Type
 import importlib
 import wave
 import pyaudio
+import asyncio
+import logging
 
-class BasicModel:
-    def __init__(self, config:dict) -> None:
-        self.is_running = False
+logger = logging.getLogger("Muice.types")
 
-    @abstractmethod
-    def load(self, model_config:dict):
-        '''加载模型'''
-        pass
-
-    @abstractmethod
-    def ask(self, prompt:str, history:list) -> str:
-        """
-        模型交互询问
-        """
-        pass
-
-    def query_image(self, image_path:str) -> str:
-        """
-        查询图片
-        """
-        raise NotImplementedError("当前模型不支持图片识别！")
-
+def _load_model(model_config_types:str = "default") -> BasicModel:
+    """
+    初始化模型类
+    """
+    model_config = get_model_config(model_config_types = model_config_types)
+    module_name = f"llm.{model_config.loader}"
+    module = importlib.import_module(module_name)
+    ModelClass:Type[BasicModel]|None = getattr(module, model_config.loader, None)
+    if not ModelClass: raise ValueError(f"Model {model_config.loader} Not Found!")
+    model = ModelClass(model_config)
+    model.load()
+    return model
 
 class BasicTTS:
     def __init__(self):
         self.is_playing = False
         
     @abstractmethod
-    def generate_tts(self, text:str) -> bool:
+    async def generate_tts(self, text:str) -> bool:
         '''生成TTS语音文件'''
         pass
 
-    def play_audio(self, file_path:str = './temp/tts_output.wav'):
+    async def play_audio(self, file_path:str = './temp/tts_output.wav'):
         self.is_playing = True
-
         wf = wave.open(file_path, 'rb')
         p = pyaudio.PyAudio()
 
@@ -56,6 +51,8 @@ class BasicTTS:
         while data and self.is_playing:
             stream.write(data)
             data = wf.readframes(1024)
+            # 让出控制权给其他协程
+            await asyncio.sleep(0.01)
 
         # 停止并关闭流
         stream.stop_stream()
@@ -77,13 +74,14 @@ class ResourceHub:
     @staticmethod
     def load_resource():
         config = Config()
+
         tts_module = importlib.import_module(f"tts")
         tts = getattr(tts_module, config.TTS_LOADER)(config.TTS_CONFIG)
-        model = importlib.import_module(f"llm.{config.LLM_MODEL_LOADER}").llm()
-        leisure_model = importlib.import_module(f"llm.{config.LEISURE_MODEL_LOADER}").llm()
-        leisure_model.load(config.LEISURE_MODEL_CONFIG)
-        multimodal = importlib.import_module(f"llm.{config.MULTIMODAL_MODEL_LOADER}").llm()
-        multimodal.load(config.MULTIMODAL_MODEL_CONFIG)
+
+        model = _load_model()
+        leisure_model = _load_model("leisure")
+        multimodal = _load_model("multimodal")
+
         captions = Captions()
         database = Database()
         return ResourceHub(config, model, leisure_model, multimodal, tts, captions, database)
@@ -104,6 +102,6 @@ class BasicTask:
     def __lt__(self, other):
         return id(self) < id(other)
     
-    def run(self):
+    async def run(self):
         '''基本任务运行入口'''
         pass

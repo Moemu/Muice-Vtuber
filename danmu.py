@@ -19,21 +19,26 @@ class DanmuHandler(blivedm.BaseHandler):
 
     def _on_open_live_enter_room(self, client: blivedm.OpenLiveClient, message: open_models.RoomEnterMessage):
         """进入房间"""
-        self.EventHandler.EnterRoomEvent(message)
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self.EventHandler.EnterRoomEvent(message), loop)
 
     def _on_open_live_danmaku(self, client: blivedm.OpenLiveClient, message: open_models.DanmakuMessage):
-        self.EventHandler.DanmuEvent(message)
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self.EventHandler.DanmuEvent(message), loop)
 
     def _on_open_live_gift(self, client: blivedm.OpenLiveClient, message: open_models.GiftMessage):
-        self.EventHandler.GiftEvent(message)
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self.EventHandler.GiftEvent(message), loop)
 
     def _on_open_live_buy_guard(self, client: blivedm.OpenLiveClient, message: open_models.GuardBuyMessage):
-        self.EventHandler.GuardBuyEvent(message)
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self.EventHandler.GuardBuyEvent(message), loop)
 
     def _on_open_live_super_chat(
         self, client: blivedm.OpenLiveClient, message: open_models.SuperChatMessage
     ):
-        self.EventHandler.SuperChatEvent(message)
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self.EventHandler.SuperChatEvent(message), loop)
 
 class Danmu:
     def __init__(self, resource_hub, danmuhandler, webui = None):

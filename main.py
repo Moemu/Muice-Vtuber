@@ -2,7 +2,7 @@ from event import DanmuEventHandler, WebUIEventHandler, EventQueue, LeisureTask
 from danmu import Danmu, DanmuHandler
 from ui import WebUI
 from utils.logger import init_logger
-from custom_types import *
+from _types import *
 # from qqbot import BotApp
 from realtime_chat import RealtimeChat
 import signal

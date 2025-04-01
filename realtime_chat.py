@@ -4,9 +4,9 @@ import os
 import keyboard
 import asyncio
 from config import Config
-from custom_types import *
+from _types import *
 from sqlite import Database
-from llm.utils.memory import generate_history
+from utils.memory import generate_history
 from utils.audio_process import SpeechRecognitionPipeline
 import threading
 import pyaudio
@@ -95,14 +95,14 @@ class RealtimeChat:
         if not message or len(message) < 2:
             return
         os.remove("./temp/stt_output.wav")
-        memory = generate_history(message, self.database.get_history(), '<RealtimeChat>')
-        reply = self.model.ask(prompt=message, history=memory)
-        self.database.add_item("<RealtimeChat>", "0", message, reply)
-        self.caption.post(message, '沐沐', '', reply)
+        memory = await generate_history(self.database, message, '<RealtimeChat>')
+        reply = await self.model.ask(prompt=message, history=memory)
+        await self.database.add_item("<RealtimeChat>", "0", message, reply)
+        await self.caption.post(message, '沐沐', '', reply)
         logger.info(f"回复消息：{reply}")
         try:
-            if self.tts.generate_tts(reply):
-                self.tts.play_audio()
+            if await self.tts.generate_tts(reply):
+                await self.tts.play_audio()
         except Exception as e:
             logger.error(f"播放语音文件失败: {e}")
         logger.info("当前对话结束.")

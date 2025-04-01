@@ -1,8 +1,8 @@
 from sqlite import Database
 import json
 
-START_ID = 1248
-END_ID = 1576
+START_ID = 1576
+END_ID = 3080
 database = Database()
 
 def output_memory():
@@ -31,4 +31,4 @@ def input_dataset():
     print(f'Input {count} memory from living data.')
 
 if __name__ == '__main__':
-    input_dataset()
+    output_memory()

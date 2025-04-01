@@ -1,6 +1,8 @@
 __pycache__
+.vscode
 temp/
 logs/
+configs/
 config.json
 configs.yml
 *.pyc
