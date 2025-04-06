@@ -20,7 +20,7 @@ class App:
         self.logger.info('初始化应用程序...')
         self.ui = WebUI()
         self.resource_hub = ResourceHub.load_resource()
-        self.leisuretask = LeisureTask(self.resource_hub)
+        self.leisuretask = LeisureTask(self.resource_hub, MessageData(username="闲时任务"))
         self.queue = EventQueue()
         self.queue.leisure_task = self.leisuretask
         self.realtime_chat = RealtimeChat(self.resource_hub)

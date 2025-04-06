@@ -18,11 +18,13 @@ class EdgeTTS(BasicTTS):
         self.text = None
         self.result = True
 
-    async def generate_tts(self, text:str) -> bool:
+    async def generate_tts(self, text:str, proxy:str|None = 'http://127.0.0.1:7890') -> bool:
         try:
-            communicate = edge_tts.Communicate(text, self.__VOICE, proxy='http://127.0.0.1:7890')
+            communicate = edge_tts.Communicate(text, self.__VOICE, proxy = proxy)
             await communicate.save(self.__OUTPUT_FILE)
         except Exception as e:
+            if proxy:
+                return await self.generate_tts(text, proxy = None)
             logger.warning(f"尝试生成TTS语音文件时出现了问题: {e}")
             return False
 

@@ -81,11 +81,19 @@ class Database:
         :userid: (可选) 用户id
         :limit: (可选) 返回的最大长度，当该变量设为0时表示全部返回
         """
-        if limit:
-            query = f"SELECT * FROM CHAT WHERE AVAILABLE = 1 AND USERID = ? ORDER BY ID DESC LIMIT {limit}"
+        # 根据文档，该函数应支持可选的userid参数，如果不提供则返回所有用户的历史记录
+        if userid:
+            if limit:
+                query = f"SELECT * FROM CHAT WHERE AVAILABLE = 1 AND USERID = ? ORDER BY ID DESC LIMIT {limit}"
+            else:
+                query = "SELECT * FROM CHAT WHERE AVAILABLE = 1 AND USERID = ?"
+            rows = await self.__execute(query, (userid,), fetchall=True)
         else:
-            query = "SELECT * FROM CHAT WHERE AVAILABLE = 1 AND USERID = ?"
-        rows = await self.__execute(query, (userid,), fetchall=True)
+            if limit:
+                query = f"SELECT * FROM CHAT WHERE AVAILABLE = 1 ORDER BY ID DESC LIMIT {limit}"
+            else:
+                query = "SELECT * FROM CHAT WHERE AVAILABLE = 1"
+            rows = await self.__execute(query, (), fetchall=True)
 
         return [Message(*row) for row in rows] if rows else []
 

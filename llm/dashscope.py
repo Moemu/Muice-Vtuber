@@ -37,6 +37,10 @@ class Dashscope(BasicModel):
         self.system_prompt = self.config.system_prompt
         self.auto_system_prompt = self.config.auto_system_prompt
         self.enable_search = self.config.online_search
+        self.content_security = self.config.content_security
+        self.extra_headers = {
+        'X-DashScope-DataInspection': '{"input":"cip","output":"cip"}'
+        } if self.content_security else {}
 
         self._tools: List[dict] = []
 
@@ -54,7 +58,7 @@ class Dashscope(BasicModel):
 
         if not prompt:
             prompt = "请描述图像内容"
-        user_content.append({"type": "text", "text": prompt})
+        user_content.append({"text": prompt})
 
         return {"role": "user", "content": user_content}
 
@@ -98,6 +102,7 @@ class Dashscope(BasicModel):
                 repetition_penalty=self.repetition_penalty,
                 stream=False,
                 enable_search=self.enable_search,
+                extra_headers=self.extra_headers
             ),
         )
 
@@ -202,7 +207,7 @@ class Dashscope(BasicModel):
                 continue
 
             if reasoning_content != "" and answer_content == "":
-                yield (reasoning_content if is_insert_think_label else "<think>" + reasoning_content)
+                yield (reasoning_content if is_insert_think_label else "<think>" + reasoning_content)  # type:ignore
                 is_insert_think_label = True
 
             elif answer_content != "":

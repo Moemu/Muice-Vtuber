@@ -64,7 +64,7 @@ class Danmu:
             self.client.stop()
             await self.client.join()
         finally:
-            await self.client.stop_and_close()
+            await self.client.stop_and_close()  # type:ignore
 
     def __start_client(self):
         self.loop = asyncio.new_event_loop()

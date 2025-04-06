@@ -1,15 +1,16 @@
 from sqlite import Database
 import json
+import asyncio
 
 START_ID = 1576
 END_ID = 3080
 database = Database()
 
-def output_memory():
-    data = database.get_history()
+async def output_memory():
+    data = await database.get_history()
     memory = []
     for i in range(START_ID, len(data)):
-        memory.append({'Prompt':data[i][4], 'Respond':data[i][5].strip(' '), 'History':[]})
+        memory.append({'Prompt':data[i].danmu, 'Respond':data[i].danmu.strip(' '), 'History':[]})
     with open(f'temp/memory_{START_ID}-{END_ID}.json', 'w', encoding='utf-8') as f:
         json.dump(memory, f, ensure_ascii=False, indent=4)
     print('Memory output successfully!')
@@ -31,4 +32,5 @@ def input_dataset():
     print(f'Input {count} memory from living data.')
 
 if __name__ == '__main__':
-    output_memory()
+    # asyncio.run(output_memory())
+    input_dataset()
