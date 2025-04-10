@@ -6,7 +6,6 @@ import json
 import ssl
 import threading
 import time
-import websocket
 from datetime import datetime
 from functools import partial
 from time import mktime
@@ -22,13 +21,11 @@ from typing import (
 from urllib.parse import urlencode, urlparse
 from wsgiref.handlers import format_date_time
 
-
-from ._types import BasicModel, Message, ModelConfig
-from .utils.auto_system_prompt import auto_system_prompt
-
+import websocket
 import logging
+from ._types import BasicModel, Message, ModelConfig
 
-logger = logging.getLogger("Mucie.Azure")
+logger = logging.getLogger("Muice.Xfyun")
 
 class Xfyun(BasicModel):
     """
@@ -123,6 +120,7 @@ class Xfyun(BasicModel):
                 self.stream_queue.put_nowait(error_message)
                 self.stream_queue.put_nowait(None)  # 表示流结束
             ws.close()
+            self.succeed = False
             return
 
         text_body = response["payload"]["choices"]["text"][0]
@@ -140,6 +138,7 @@ class Xfyun(BasicModel):
 
     def __on_error(self, ws, error):
         logger.error(f"调用Spark在线模型时发生错误: {error}")
+        self.succeed = False
         ws.close()
 
     def __on_close(self, ws, close_status_code, close_msg):
@@ -160,35 +159,33 @@ class Xfyun(BasicModel):
         }
         ws.send(json.dumps(request_data))
 
-    def __generate_system_prompt(self, user_text: str) -> str:
-        if self.auto_system_prompt:
-            return "system\n\n" + auto_system_prompt(user_text) + "user\n\n"
-        return "system\n\n" + self.system_prompt + "user\n\n"
-
-    def _build_messages(self, prompt: str, history: List[Message], images_path: Optional[List[str]] = None) -> list:
+    def _build_messages(
+        self, prompt: str, history: List[Message], images_path: Optional[List[str]] = None, system: Optional[str] = None
+    ) -> list:
         messages = []
 
-        if len(history) > 0:
+        if len(history) > 0 and system:
             messages.append(
                 {
                     "role": "user",
-                    "content": self.__generate_system_prompt(history[0].danmu) + history[0].danmu,
+                    "content": f"system\n\n{system}\n\nuser\n\n{history[0].danmu}",
                 }
             )
+
+        elif system:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"system\n\n{system}\n\nuser\n\n{history[0].danmu}",
+                }
+            )
+            return messages
 
         for item in history:
             messages.append({"role": "user", "content": item.danmu})
             messages.append({"role": "assistant", "content": item.respond})
 
-        if len(history) == 0:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": self.__generate_system_prompt(prompt) + prompt,
-                }
-            )
-        else:
-            messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": prompt})
 
         return messages
 
@@ -244,6 +241,7 @@ class Xfyun(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[False] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> str: ...
 
@@ -255,6 +253,7 @@ class Xfyun(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[True] = True,
+        system: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]: ...
 
@@ -265,15 +264,14 @@ class Xfyun(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Optional[bool] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> Union[AsyncGenerator[str, None], str]:
-        """
-        多模态：图像识别
+        self.succeed = True
 
-        :param image_path: 图像路径
-        :return: 识别结果
-        """
-        messages = self._build_messages(prompt, history, images)
+        if tools:
+            logger.warning("该模型加载器不支持 Function Call!")
+        messages = self._build_messages(prompt, history, images, system)
 
         if stream:
             return await self._ask_stream(messages)

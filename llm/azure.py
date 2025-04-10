@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from typing import AsyncGenerator, List, Literal, Optional, Union, overload
 
 from azure.ai.inference.aio import ChatCompletionsClient
@@ -23,21 +24,16 @@ from azure.ai.inference.models import (
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
 
-from ._types import BasicModel, Message, ModelConfig
-from .utils.auto_system_prompt import auto_system_prompt
-import logging
+from ._types import BasicModel, Message, ModelConfig, function_call_handler
 
-logger = logging.getLogger("Mucie.Azure")
+logger = logging.getLogger("Muice.Azure")
+
 
 class Azure(BasicModel):
     def __init__(self, model_config: ModelConfig) -> None:
         super().__init__(model_config)
         self._require("model_name")
         self.model_name = self.config.model_name
-        self.system_prompt = self.config.system_prompt
-        self.auto_system_prompt = self.config.auto_system_prompt
-        self.user_instructions = self.config.user_instructions
-        self.auto_user_instructions = self.config.auto_user_instructions
         self.max_tokens = self.config.max_tokens
         self.temperature = self.config.temperature
         self.top_p = self.config.top_p
@@ -80,15 +76,12 @@ class Azure(BasicModel):
         return tool_definitions
 
     def _build_messages(
-        self, prompt: str, history: List[Message], image_paths: Optional[List] = None
+        self, prompt: str, history: List[Message], image_paths: Optional[List] = None, system: Optional[str] = None
     ) -> List[ChatRequestMessage]:
         messages: List[ChatRequestMessage] = []
 
-        if self.auto_system_prompt:
-            self.system_prompt = auto_system_prompt(prompt)
-
-        if self.system_prompt:
-            messages.append(SystemMessage(self.system_prompt))
+        if system:
+            messages.append(SystemMessage(system))
 
         for msg in history:
             user_msg = (
@@ -97,17 +90,7 @@ class Azure(BasicModel):
             messages.append(user_msg)
             messages.append(AssistantMessage(msg.respond))
 
-        if self.auto_user_instructions:
-            self.user_instructions = auto_system_prompt(prompt)
-
-        if self.user_instructions and not history:
-            user_message = self.user_instructions + "\n" + prompt
-        else:
-            user_message = prompt
-
-        user_message = (
-            UserMessage(user_message) if not image_paths else self.__build_image_messages(prompt, image_paths)
-        )
+        user_message = UserMessage(prompt) if not image_paths else self.__build_image_messages(prompt, image_paths)
 
         messages.append(user_message)
 
@@ -150,28 +133,29 @@ class Azure(BasicModel):
             elif finish_reason == CompletionsFinishReason.TOKEN_LIMIT_REACHED:
                 return "(模型内部错误: 达到了最大 token 限制)"
 
-            # elif finish_reason == CompletionsFinishReason.TOOL_CALLS:
-            #     tool_calls = response.choices[0].message.tool_calls
-            #     messages.append(AssistantMessage(tool_calls=tool_calls))
-            #     if not self._tool_messages_precheck(tool_calls=tool_calls):
-            #         return "(模型内部错误: tool_calls 内容为空)"
+            elif finish_reason == CompletionsFinishReason.TOOL_CALLS:
+                tool_calls = response.choices[0].message.tool_calls
+                messages.append(AssistantMessage(tool_calls=tool_calls))
+                if not self._tool_messages_precheck(tool_calls=tool_calls):
+                    return "(模型内部错误: tool_calls 内容为空)"
 
-            #     tool_call = tool_calls[0]  # type:ignore
-            #     function_args = json.loads(tool_call.function.arguments.replace("'", '"'))
-            #     logger.info(f"function call 请求 {tool_call.function.name}, 参数: {function_args}")
-            #     function_return = await function_call_handler(tool_call.function.name, function_args)
-            #     logger.success(f"Function call 成功，返回: {function_return}")
+                tool_call = tool_calls[0]  # type:ignore
+                function_args = json.loads(tool_call.function.arguments.replace("'", '"'))
+                logger.info(f"function call 请求 {tool_call.function.name}, 参数: {function_args}")
+                function_return = await function_call_handler(tool_call.function.name, function_args)
+                logger.info(f"Function call 成功，返回: {function_return}")
 
-            #     # Append the function call result fo the chat history
-            #     messages.append(ToolMessage(tool_call_id=tool_call.id, content=function_return))
+                # Append the function call result fo the chat history
+                messages.append(ToolMessage(tool_call_id=tool_call.id, content=function_return))
 
-            #     return await self._ask_sync(messages)
+                return await self._ask_sync(messages)
 
             return "(模型内部错误: 未知错误)"
 
         except HttpResponseError as e:
             logger.error(f"模型响应失败: {e.status_code} ({e.reason})")
             logger.error(f"{e.message}")
+            self.succeed = False
             return f"模型响应失败: {e.status_code} ({e.reason})"
         finally:
             await client.close()
@@ -219,34 +203,35 @@ class Azure(BasicModel):
                 elif finish_reason == CompletionsFinishReason.TOKEN_LIMIT_REACHED:
                     yield "(模型内部错误: 达到了最大 token 限制)"
 
-                # elif finish_reason == CompletionsFinishReason.TOOL_CALLS:
-                #     messages.append(
-                #         AssistantMessage(
-                #             tool_calls=[
-                #                 ChatCompletionsToolCall(
-                #                     id=tool_call_id, function=FunctionCall(name=function_name, arguments=function_args)
-                #                 )
-                #             ]
-                #         )
-                #     )
+                elif finish_reason == CompletionsFinishReason.TOOL_CALLS:
+                    messages.append(
+                        AssistantMessage(
+                            tool_calls=[
+                                ChatCompletionsToolCall(
+                                    id=tool_call_id, function=FunctionCall(name=function_name, arguments=function_args)
+                                )
+                            ]
+                        )
+                    )
 
-                #     function_arg = json.loads(function_args.replace("'", '"'))
-                #     logger.info(f"function call 请求 {function_name}, 参数: {function_arg}")
-                #     function_return = await function_call_handler(function_name, function_arg)
-                #     logger.success(f"Function call 成功，返回: {function_return}")
+                    function_arg = json.loads(function_args.replace("'", '"'))
+                    logger.info(f"function call 请求 {function_name}, 参数: {function_arg}")
+                    function_return = await function_call_handler(function_name, function_arg)
+                    logger.info(f"Function call 成功，返回: {function_return}")
 
-                #     # Append the function call result fo the chat history
-                #     messages.append(ToolMessage(tool_call_id=tool_call_id, content=function_return))
+                    # Append the function call result fo the chat history
+                    messages.append(ToolMessage(tool_call_id=tool_call_id, content=function_return))
 
-                #     async for chunk in self._ask_stream(messages):
-                #         yield chunk
+                    async for content in self._ask_stream(messages):
+                        yield content
 
-                #     return
+                    return
 
         except HttpResponseError as e:
             logger.error(f"模型响应失败: {e.status_code} ({e.reason})")
             logger.error(f"{e.message}")
             yield f"模型响应失败: {e.status_code} ({e.reason})"
+            self.succeed = False
         finally:
             await client.close()
 
@@ -258,6 +243,7 @@ class Azure(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[False] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> str: ...
 
@@ -269,6 +255,7 @@ class Azure(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[True] = True,
+        system: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]: ...
 
@@ -279,10 +266,12 @@ class Azure(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Optional[bool] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> Union[AsyncGenerator[str, None], str]:
+        self.succeed = True
 
-        messages = self._build_messages(prompt, history, images)
+        messages = self._build_messages(prompt, history, images, system)
 
         self._tools = self.__build_tools_definition(tools) if tools else []
 

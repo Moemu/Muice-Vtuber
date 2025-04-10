@@ -43,8 +43,6 @@ def stream_process_thoughts(chunk: str, status: Literal[0, 1, 2] = 1) -> str:
     if not status:
         return chunk
 
-    inside_think = False
-
     if status == 2:
         if "<think>" in chunk:
             inside_think = True

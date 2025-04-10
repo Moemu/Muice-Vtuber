@@ -4,9 +4,11 @@ from typing import Type, Tuple, List
 from ui import WebUI
 from utils.memory import generate_history
 from utils.utils import get_avatar_base64, message_precheck, screenshot
+from llm.utils.auto_system_prompt import auto_system_prompt
 import random,asyncio,time
 
 import logging
+
 logger = logging.getLogger('Muice.Event')
 
 # 任务队列
@@ -146,7 +148,8 @@ class DanmuTask(BasicTask):
         logger.debug(f'[{self.data.username}] 获取到的历史记录: {history}')
         
         prompt = f'<{self.data.username}> {self.data.message}'
-        respond = await self.model.ask(prompt=prompt, history=history, stream=False) or '(已过滤)'
+        system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
+        respond = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
         logger.info(f'[{self.data.username}] {self.data.message} -> {respond}')
 
         await self.post_response(respond)
@@ -170,7 +173,8 @@ class SuperChatTask(BasicTask):
         history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid)
 
         prompt = f'<{self.data.username}> {self.data.message}'
-        model_output = await self.model.ask(prompt=prompt, history=history, stream=False) or '(已过滤)'
+        system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
+        model_output = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
         respond = f"感谢 {self.data.username} 的SuperChat。\n" + model_output
         logger.info(f'[{self.data.username}] 醒目留言 -> {respond}')
 
@@ -195,7 +199,8 @@ class LeisureTask(BasicTask):
         active_prompts = ['<生成推文: 胡思乱想>', '<生成推文: AI生活>', '<生成推文: AI思考>', '<生成推文: 表达爱意>', '<生成推文: 情感建议>']
         prompt = random.choice(active_prompts)
 
-        respond = await self.leisure_model.ask(prompt, history=[])
+        system = auto_system_prompt(self.data.message) if self.leisure_model.config.auto_system_prompt else self.leisure_model.config.system_prompt
+        respond = await self.leisure_model.ask(prompt, history=[], system=system)
 
         await self.post_response(respond, save=False)
         await self.database.add_item('闲时任务', '0', prompt, respond)
@@ -216,7 +221,8 @@ class RefreshTask(BasicTask):
 
         prompt = history[-1].danmu
         history = history[:-1]
-        respond = await self.model.ask(prompt, history=history) or '(已过滤)'
+        system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model.config.system_prompt
+        respond = await self.model.ask(prompt, history=history, tools=self.tools, system=system) or '(已过滤)'
         logger.info(f'[{self.data.username}] {prompt} -> {respond}')
 
         await self.database.remove_last_item(self.data.userid)
@@ -248,7 +254,8 @@ class ReadScreenTask(BasicTask):
 
         screenshot()
         image_info = await self.multimodal.ask(prompt="用简单的一段话描述一下这张图片", history=[], images=['./temp/screenshot.png'], stream=False)
-        respond = await self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}>', history=[]) or '(已过滤)'
+        system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
+        respond = await self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}>', history=[], system=system) or '(已过滤)'
         logger.info(f'[读屏任务] <读屏任务-沐沐的屏幕内容: {image_info}> -> {respond}')
 
         await self.post_response(respond, save=False)

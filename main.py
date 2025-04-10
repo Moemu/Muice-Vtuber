@@ -1,5 +1,6 @@
 from event import DanmuEventHandler, WebUIEventHandler, EventQueue, LeisureTask
 from danmu import Danmu, DanmuHandler
+from plugin import load_plugins
 from ui import WebUI
 from utils.logger import init_logger
 from _types import *
@@ -35,6 +36,11 @@ class App:
 
         signal.signal(signal.SIGINT, self.shutdown)
         threading.excepthook = self.error
+
+        self._load_plugins()
+
+    def _load_plugins(self):
+        load_plugins("./plugins")
 
     def start(self):
         try:

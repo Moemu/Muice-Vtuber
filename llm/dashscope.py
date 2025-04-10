@@ -19,10 +19,10 @@ from dashscope.api_entities.dashscope_response import (
 )
 import logging
 
-from ._types import BasicModel, Message, ModelConfig
-from .utils.auto_system_prompt import auto_system_prompt
+from ._types import BasicModel, Message, ModelConfig, function_call_handler
 
-logger = logging.getLogger("Mucie.Azure")
+logger = logging.getLogger("Muice.Dashscope")
+
 
 class Dashscope(BasicModel):
     def __init__(self, model_config: ModelConfig) -> None:
@@ -34,13 +34,7 @@ class Dashscope(BasicModel):
         self.temperature = self.config.temperature
         self.top_p = self.config.top_p
         self.repetition_penalty = self.config.repetition_penalty
-        self.system_prompt = self.config.system_prompt
-        self.auto_system_prompt = self.config.auto_system_prompt
         self.enable_search = self.config.online_search
-        self.content_security = self.config.content_security
-        self.extra_headers = {
-        'X-DashScope-DataInspection': '{"input":"cip","output":"cip"}'
-        } if self.content_security else {}
 
         self._tools: List[dict] = []
 
@@ -58,17 +52,17 @@ class Dashscope(BasicModel):
 
         if not prompt:
             prompt = "请描述图像内容"
-        user_content.append({"text": prompt})
+        user_content.append({"type": "text", "text": prompt})
 
         return {"role": "user", "content": user_content}
 
-    def _build_messages(self, prompt: str, history: List[Message], image_paths: Optional[List[str]] = None) -> list:
+    def _build_messages(
+        self, prompt: str, history: List[Message], image_paths: Optional[List[str]] = None, system: Optional[str] = None
+    ) -> list:
         messages = []
 
-        if self.auto_system_prompt:
-            self.system_prompt = auto_system_prompt(prompt)
-        if self.system_prompt:
-            messages.append({"role": "system", "content": self.system_prompt})
+        if system:
+            messages.append({"role": "system", "content": system})
 
         for msg in history:
             user_msg = (
@@ -102,14 +96,15 @@ class Dashscope(BasicModel):
                 repetition_penalty=self.repetition_penalty,
                 stream=False,
                 enable_search=self.enable_search,
-                extra_headers=self.extra_headers
             ),
         )
 
         if not isinstance(response, GenerationResponse):
+            self.succeed = False
             return "(模型内部错误：在流关闭的情况下返回了 Generator)"
 
         if response.status_code != 200:
+            self.succeed = False
             logger.error(f"模型调用失败: {response.status_code}({response.code})")
             logger.error(f"{response.message}")
             return f"模型调用失败: {response.status_code}({response.code})"
@@ -120,22 +115,20 @@ class Dashscope(BasicModel):
         message_content = response.output.choices[0].message.content
         if message_content:
             return message_content if isinstance(message_content, str) else "".join(message_content)
-        else:
-            return "(警告：模型返回为空)"
 
-        # tool_call = response.output.choices[0].message.tool_calls[0]
-        # tool_call_id = tool_call["id"]
-        # function_name = tool_call["function"]["name"]
-        # function_args = json.loads(tool_call["function"]["arguments"])
+        tool_call = response.output.choices[0].message.tool_calls[0]
+        tool_call_id = tool_call["id"]
+        function_name = tool_call["function"]["name"]
+        function_args = json.loads(tool_call["function"]["arguments"])
 
-        # logger.info(f"function call 请求 {function_name}, 参数: {function_args}")
-        # function_return = await function_call_handler(function_name, function_args)
-        # logger.success(f"Function call 成功，返回: {function_return}")
+        logger.info(f"function call 请求 {function_name}, 参数: {function_args}")
+        function_return = await function_call_handler(function_name, function_args)
+        logger.info(f"Function call 成功，返回: {function_return}")
 
-        # messages.append(response.output.choices[0].message)
-        # messages.append({"role": "tool", "content": function_return, "tool_call_id": tool_call_id})
+        messages.append(response.output.choices[0].message)
+        messages.append({"role": "tool", "content": function_return, "tool_call_id": tool_call_id})
 
-        # return await self._ask_sync(messages)
+        return await self._ask_sync(messages)
 
     async def _ask_stream(self, messages: list) -> AsyncGenerator[str, None]:
         loop = asyncio.get_event_loop()
@@ -160,6 +153,7 @@ class Dashscope(BasicModel):
         )
 
         if isinstance(response, GenerationResponse):
+            self.succeed = False
             logger.warning("模型内部错误：在流开启的情况下返回了 GenerationResponse")
             yield response.output.text
             return
@@ -178,6 +172,7 @@ class Dashscope(BasicModel):
                 logger.error(f"模型调用失败: {chunk.status_code}({chunk.code})")
                 logger.error(f"{chunk.message}")
                 yield f"模型调用失败: {chunk.status_code}({chunk.code})"
+                self.succeed = False
                 return
 
             if chunk.output.choices and chunk.output.choices[0].message.get("tool_calls", []):
@@ -264,9 +259,11 @@ class Dashscope(BasicModel):
         )
 
         if isinstance(response, Generator):
+            self.succeed = False
             return "(模型内部错误: 在流关闭的情况下返回了 Generator)"
 
         if response.status_code != 200:
+            self.succeed = False
             logger.error(f"模型调用失败: {response.status_code}({response.code})")
             logger.error(f"{response.message}")
             return f"模型调用失败: {response.status_code}({response.code})"
@@ -291,6 +288,7 @@ class Dashscope(BasicModel):
         )
 
         if isinstance(response, MultiModalConversationResponse):
+            self.succeed = False
             logger.warning("模型内部错误：在流开启的情况下返回了 MultiModalConversationResponse")
             if isinstance(response.output.choices[0].message.content, str):
                 yield response.output.choices[0].message.content
@@ -303,6 +301,7 @@ class Dashscope(BasicModel):
         for chunk in response:
             logger.debug(chunk)
             if chunk.status_code != 200:
+                self.succeed = False
                 logger.error(f"模型调用失败: {chunk.status_code}({chunk.code})")
                 logger.error(f"{chunk.message}")
                 yield f"模型调用失败: {chunk.status_code}({chunk.code})"
@@ -324,6 +323,7 @@ class Dashscope(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[False] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> str: ...
 
@@ -335,6 +335,7 @@ class Dashscope(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[True] = True,
+        system: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]: ...
 
@@ -345,13 +346,16 @@ class Dashscope(BasicModel):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Optional[bool] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> Union[AsyncGenerator[str, None], str]:
         """
         因为 Dashscope 对于多模态模型的接口不同，所以这里不能统一函数
         """
+        self.succeed = True
+
         self._tools = tools if tools else []
-        messages = self._build_messages(prompt, history, images)
+        messages = self._build_messages(prompt, history, images, system)
 
         if stream:
             if self.config.multimodal:

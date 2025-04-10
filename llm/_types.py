@@ -1,10 +1,14 @@
 from abc import ABCMeta, abstractmethod
-from importlib.util import find_spec
 from typing import AsyncGenerator, List, Literal, Optional, Union, overload
-from pydantic import BaseModel, field_validator
 from dataclasses import dataclass
 from datetime import datetime
-import json
+from abc import ABCMeta, abstractmethod
+from typing import Any, AsyncGenerator, List, Literal, Optional, Union, overload
+
+from pydantic import BaseModel
+
+from plugin import get_function_calls
+
 
 @dataclass
 class Message:
@@ -110,20 +114,6 @@ class ModelConfig(BaseModel):
     multimodal: bool = False
     """是否为多模态模型（注意：对应的加载器必须实现 `ask_vision` 方法）"""
 
-    @field_validator("loader")
-    @classmethod
-    def check_model_loader(cls, loader) -> str:
-        if not loader:
-            raise ValueError("loader is required")
-
-        # Check if the specified loader exists
-        module_path = f"llm.{loader}"
-
-        # 使用 find_spec 仅检测模块是否存在，不实际导入
-        if find_spec(module_path) is None:
-            raise ValueError(f"指定的模型加载器 '{loader}' 不存在于 llm 目录中")
-
-        return loader
 
 
 class BasicModel(metaclass=ABCMeta):
@@ -138,7 +128,11 @@ class BasicModel(metaclass=ABCMeta):
         统一在此处声明变量
         """
         self.config = model_config
+        """模型配置"""
         self.is_running = False
+        """模型状态"""
+        self.succeed = True
+        """模型是否成功返回结果"""
 
     def _require(self, *require_fields: str):
         """
@@ -185,6 +179,7 @@ class BasicModel(metaclass=ABCMeta):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[False] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> str: ...
 
@@ -196,6 +191,7 @@ class BasicModel(metaclass=ABCMeta):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Literal[True] = True,
+        system: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]: ...
 
@@ -207,6 +203,7 @@ class BasicModel(metaclass=ABCMeta):
         images: Optional[List[str]] = [],
         tools: Optional[List[dict]] = [],
         stream: Optional[bool] = False,
+        system: Optional[str] = None,
         **kwargs,
     ) -> Union[AsyncGenerator[str, None], str]:
         """
@@ -217,27 +214,28 @@ class BasicModel(metaclass=ABCMeta):
         :param images: 本地图片路径列表
         :param tools: 工具列表
         :param stream: 是否使用流式输出
+        :param system: 系统提示
 
         :return: 模型回复
         """
         pass
 
 
-# class FunctionCallRequest(BaseModel):
-#     """
-#     模型 FunctionCall 请求
-#     """
+class FunctionCallRequest(BaseModel):
+    """
+    模型 FunctionCall 请求
+    """
 
-#     func: str
-#     """函数名称"""
-#     arguments: dict[str, str] | None = None
-#     """函数参数"""
+    func: str
+    """函数名称"""
+    arguments: dict[str, str] | None = None
+    """函数参数"""
 
 
-# async def function_call_handler(func: str, arguments: dict[str, str] | None = None) -> Any:
-#     """
-#     模型 Function Call 请求处理
-#     """
-#     arguments = arguments if arguments else {}
-#     func_caller = get_function_calls().get(func)
-#     return await func_caller.run(**arguments) if func_caller else "(Unknown Function)"
+async def function_call_handler(func: str, arguments: dict[str, str] | None = None) -> Any:
+    """
+    模型 Function Call 请求处理
+    """
+    arguments = arguments if arguments and arguments != {"dummy_param": ""} else {}
+    func_caller = get_function_calls().get(func)
+    return await func_caller.run(**arguments) if func_caller else "(Unknown Function)"

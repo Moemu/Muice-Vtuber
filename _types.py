@@ -6,6 +6,7 @@ from sqlite import Database
 from typing import Type
 from utils.filter import message_filiter
 from dataclasses import dataclass
+from plugin import get_tools
 import importlib
 import wave
 import pyaudio
@@ -120,12 +121,15 @@ class BasicTask:
     def __init__(self, resource_hub: ResourceHub, data:MessageData) -> None:
         self.resource_hub = resource_hub
         self.model = resource_hub.model
+        self.model_config = self.model.config
         self.leisure_model = resource_hub.leisure_model
         self.multimodal = resource_hub.multimodal
         self.tts = resource_hub.tts
         self.captions = resource_hub.captions
         self.database = resource_hub.database
         self.data = data
+
+        self.tools = get_tools() if self.model_config.function_call else []
 
     def __lt__(self, other):
         return id(self) < id(other)

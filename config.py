@@ -8,6 +8,13 @@ from pathlib import Path
 MODELS_CONFIG_PATH = Path("configs/models.yml").resolve()
 
 class Config:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self) -> None:
         with open('configs.yml','r',encoding='utf-8') as f:
             self.config = yaml.load(f, Loader=yaml.FullLoader)
@@ -21,6 +28,7 @@ class Config:
         self.DANMU_ROOM_OWNER_AUTH_CODE = self.config['danmu']['room_owner_auth_code']
         self.TTS_LOADER = self.config['tts']['loader']
         self.TTS_CONFIG = self.config['tts']
+        self.WEATHER = self.config['weather']
 
     def save(self, key:str, value:str) -> None:
         self.config[key] = value
