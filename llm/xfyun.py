@@ -176,7 +176,7 @@ class Xfyun(BasicModel):
             messages.append(
                 {
                     "role": "user",
-                    "content": f"system\n\n{system}\n\nuser\n\n{history[0].danmu}",
+                    "content": f"system\n\n{system}\n\nuser\n\n{prompt}",
                 }
             )
             return messages
