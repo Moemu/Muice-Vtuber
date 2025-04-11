@@ -263,6 +263,21 @@ class ReadScreenTask(BasicTask):
 
         logger.info(f'[读屏任务] 事件处理结束')
 
+class DevMicrophoneTask(BasicTask):
+    async def run(self):
+        logger.info(f'[Dev] {self.data.message}')
+
+        prompt = f'<{self.data.username}> {self.data.message}'
+        system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
+        history = await generate_history(self.database, self.data.message, '沐沐')
+        respond = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
+        logger.info(f'[Dev] {self.data.message} -> {respond}')
+
+        await self.post_response(respond, save=False)
+        await self.database.add_item("沐沐", "0", self.data.message, respond)
+
+        logger.info(f'[{self.data.username}] 事件处理结束')
+
 # WebUI事件处理(总事件处理)
 class WebUIEventHandler:
     def __init__(self, resource_hub: ResourceHub, webui:WebUI, danmu, queue, realtimechat) -> None:

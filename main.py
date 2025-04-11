@@ -24,7 +24,7 @@ class App:
         self.leisuretask = LeisureTask(self.resource_hub, MessageData(username="闲时任务"))
         self.queue = EventQueue()
         self.queue.leisure_task = self.leisuretask
-        self.realtime_chat = RealtimeChat(self.resource_hub)
+        self.realtime_chat = RealtimeChat(self.resource_hub, self.queue)
         self.event_handler = DanmuEventHandler(self.resource_hub, self.queue, self.ui)
         self.danmu_handler = DanmuHandler(self.event_handler)
         self.danmu = Danmu(self.resource_hub, self.danmu_handler, self.ui)
