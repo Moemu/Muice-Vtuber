@@ -81,7 +81,9 @@ async def get_avatar_base64(url:str) -> str:
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36'}) as response:
             avatar_data = await response.read()
-    return base64.b64encode(avatar_data).decode("ascii")
+    # Convert to 'data:image/*;base64,' format for web use
+    mime_type = response.headers.get('content-type', 'image/jpeg')
+    return f"data:{mime_type};base64,{base64.b64encode(avatar_data).decode('ascii')}"
 
 def message_precheck(message:str) -> bool:
     # 纯emoji消息不发送
