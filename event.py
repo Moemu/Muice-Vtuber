@@ -1,6 +1,6 @@
 from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage,RoomEnterMessage
 from _types import *
-from typing import Type, Tuple, List
+from typing import Type, Tuple, List, Dict
 from ui import WebUI
 from utils.memory import generate_history
 from utils.utils import get_avatar_base64, message_precheck, screenshot
@@ -19,15 +19,29 @@ class EventQueue:
             self.leisure_task: LeisureTask | None = None
         self.is_running = False
         self.first_run = first_run
+        self.task_expiry: Dict[int, float] = {
+            1: 300.0,   # 高优先级任务（如上舰事件）最长保留 5 分钟
+            10: 30.0,   # 进入房间事件最长保留 30 秒
+        }
+        self.DECAY_FACTOR = 0.1
+
+    def get_priority_snapshot(self):
+        """
+        非异步方法：返回当前队列中所有任务的优先级和时间戳（只做观察，不修改队列）
+        """
+        snapshot = list(self.queue._queue)  # type:ignore
+        return [(item[0], item[1], str(item[2])) for item in snapshot]
 
     async def __run(self):
-        idle_time = 0  # 记录空闲时间
+        """任务处理主循环（完整版）"""
+        self.is_running = True
+        idle_time = 0
 
         while self.is_running:
+            # 空闲任务生成逻辑（保留原有逻辑）
             if self.queue.empty():
                 await asyncio.sleep(0.5)
                 idle_time += 0.5
-
                 if idle_time >= 50 and random.random() < 0.05:
                     # 5% 概率决定任务类型
                     if random.random() < 0.05:
@@ -40,84 +54,105 @@ class EventQueue:
                     idle_time = 0  # 重置空闲时间
                 continue
 
-            idle_time = 0  # 有任务时重置空闲时间
+            # ----------------------------
+            # 动态优先级处理核心
+            # ----------------------------
+            current_time = time.time()
+            items = []
 
-            try:
-                priority, _, task_class = await self.queue.get()
-            except Exception as e:
-                logger.error(f"获取任务时出错: {e}")
+            # 1. 取出所有任务并过滤过期
+            while not self.queue.empty():
+                initial_priority, ts, task = await self.queue.get()
+                expiry = self.task_expiry.get(initial_priority, float('inf'))
+                
+                if current_time - ts > expiry:
+                    logger.info(f"执行前丢弃过期任务: {task}")
+                    continue
+                
+                # 计算动态优先级
+                wait_time = current_time - ts
+                dynamic_priority = initial_priority + wait_time * self.DECAY_FACTOR
+                items.append( (dynamic_priority, initial_priority, ts, task) )
+
+            # 2. 如果没有有效任务则继续循环
+            if not items:
                 continue
 
-            if not task_class:
-                continue
+            # 3. 按动态优先级排序
+            items.sort(key=lambda x: (x[0], x[1]))  # 先按动态优先级，再按时间戳
 
+            # 4. 处理最高优先级任务
+            _, initial_priority, ts, task = items[0]
             try:
-                await task_class.run()
+                logger.info(f"执行任务: {task} (动态优先级={items[0][0]:.1f})")
+                await task.run()
             except Exception as e:
-                logger.error(f"执行任务时出错: {e}", exc_info=True)
+                logger.error(f"任务执行失败: {e}", exc_info=True)
 
-            logger.debug(f"当前队列长度: {self.queue.qsize()}")
+            # 5. 将剩余任务重新入队（保持原始格式）
+            for item in items[1:]:
+                await self.queue.put( (item[1], item[2], item[3]) )
 
-    async def __create_a_leisure_task(self):
-        """
-        发布一个闲时任务
-        """
-        await self.put(10, self.leisure_task)
-
-    async def __create_a_read_screen_task(self):
-        """
-        发布了一个读屏任务
-        """
-        if not self.leisure_task: return
-        data = MessageData()
-        await self.put(10, ReadScreenTask(self.leisure_task.resource_hub, data))
+            # 6. 重置空闲时间
+            idle_time = 0
 
     async def put(self, priority: int, event):
+        """入队方法（核心修改点）"""
         timestamp = time.time()
-        new_item = (priority, timestamp, event)
+        new_item = (priority, timestamp, event)  # 元组结构: (初始优先级, 时间戳, 任务对象)
 
         if not self.queue.full():
             await self.queue.put(new_item)
+            logger.debug(f"入队成功: {event} (优先级={priority})")
             return
 
-        # 队列满了，取出所有任务暂存
+        # ----------------------------
+        # 队列已满时的替换策略（动态优先级版）
+        # ----------------------------
+        current_time = time.time()
         temp_items = []
-        lower_priority_items = []
-        same_priority_items = []
 
-        for _ in range(self.queue.qsize()):
-            item = await self.queue.get()
-            temp_items.append(item)
-            item_priority, item_timestamp, _ = item
+        # 1. 取出所有任务，计算动态优先级并检测过期
+        while not self.queue.empty():
+            initial_priority, ts, task = await self.queue.get()
+            expiry = self.task_expiry.get(initial_priority, float('inf'))
+            
+            # 淘汰过期任务
+            if current_time - ts > expiry:
+                logger.info(f"丢弃过期任务: {task} (存活时间={current_time - ts:.1f}s)")
+                continue
+                
+            # 计算动态优先级
+            wait_time = current_time - ts
+            dynamic_priority = initial_priority + wait_time * self.DECAY_FACTOR
+            temp_items.append( (dynamic_priority, initial_priority, ts, task) )
 
-            if item_priority > priority:  # 更低优先级
-                lower_priority_items.append(item)
-            elif item_priority == priority:
-                same_priority_items.append(item)
+        # 2. 添加新任务到临时列表
+        wait_time_new = 0  # 新任务等待时间为0
+        dynamic_priority_new = priority + wait_time_new * self.DECAY_FACTOR
+        temp_items.append( (dynamic_priority_new, priority, timestamp, event) )
 
-        replaced = False
+        # 3. 按动态优先级排序（数值越小越优先）
+        temp_items.sort(key=lambda x: (x[0], x[1]))
 
-        if lower_priority_items:
-            # 替换最早插入的低优先级任务
-            to_replace = min(lower_priority_items, key=lambda x: x[1])
-            temp_items.remove(to_replace)
-            logger.warning(f"优先级较低的事件 {to_replace} 被替换")
-            replaced = True
-        elif same_priority_items:
-            # 替换最早插入的同优先级任务
-            to_replace = min(same_priority_items, key=lambda x: x[1])
-            temp_items.remove(to_replace)
-            logger.warning(f"同优先级的早期事件 {to_replace} 被替换")
-            replaced = True
+        # 4. 保留前 (maxsize-1) 个任务，最后一个位置给新任务竞争
+        kept_items = temp_items[:self.queue.maxsize-1]
+        candidates = temp_items[self.queue.maxsize-1:]
 
-        # 重新放回其他任务
-        for item in temp_items:
-            await self.queue.put(item)
-
-        if replaced:
-            await self.queue.put(new_item)
+        # 5. 选择动态优先级最低的任务与新任务竞争
+        if candidates:
+            worst_item = max(candidates, key=lambda x: x[0])
+            if new_item[0] < worst_item[0]:  # 新任务优先级更高
+                kept_items.append( (dynamic_priority_new, priority, timestamp, event) )
+                logger.warning(f"替换低优先级任务: {worst_item[3]} → {event}")
+            else:
+                logger.warning(f"忽略新任务: {event} (队列中任务优先级更高)")
         else:
-            logger.warning(f"事件 {event} 被忽略，队列中任务优先级更高")
+            kept_items.append( (dynamic_priority_new, priority, timestamp, event) )
+
+        # 6. 重新入队（按初始优先级和时间戳）
+        for item in kept_items:
+            await self.queue.put( (item[1], item[2], item[3]) )  # 重新使用原始格式
 
     def start(self) -> bool:
         if self.is_running:
@@ -138,6 +173,19 @@ class EventQueue:
         self.first_run = False
         logger.info('事件队列已停止')
 
+    async def __create_a_leisure_task(self):
+        """
+        发布一个闲时任务
+        """
+        await self.put(10, self.leisure_task)
+
+    async def __create_a_read_screen_task(self):
+        """
+        发布了一个读屏任务
+        """
+        if not self.leisure_task: return
+        data = MessageData()
+        await self.put(10, ReadScreenTask(self.leisure_task.resource_hub, data))
 
 class DanmuTask(BasicTask):
     '''弹幕任务'''
@@ -433,7 +481,7 @@ class DanmuEventHandler:
         data = MessageData(username, userid, userface, message)
         task_cls, priority = CommandTask.get_task(message)
         task = task_cls(self.resource_hub, data)
-        priority = 4 if fans_medal_level else priority
+        # priority = 4 if fans_medal_level else priority
         await self.quene.put(priority, task)
 
 
