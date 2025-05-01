@@ -52,12 +52,12 @@ class PretreatQueue:
         """
         获取队列内容并过滤优先级超过阈值的任务
         """
-        current_time = time.time()
+        # current_time = time.time()
         queue_items:List[Tuple[float, BasicTask]] = []
         
         while not self._queue.empty():
             priority, task = await self._queue_get()
-            priority += self.DECAY_FACTOR
+            # priority += self.DECAY_FACTOR
 
             # 动态优先级过滤
             if priority >= self.MAX_PRIORITY:
