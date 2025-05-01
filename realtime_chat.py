@@ -5,7 +5,7 @@ import keyboard
 import asyncio
 from config import Config
 from _types import ResourceHub, MessageData
-from event import EventQueue, DevMicrophoneTask
+from event import PretreatQueue, DevMicrophoneTask
 from sqlite import Database
 from utils.audio_process import SpeechRecognitionPipeline
 import threading
@@ -23,7 +23,7 @@ SILENCE_COUNT = int(SILENCE_THRESHOLD_MS / (1000 * CHUNK / RATE))  # 静音计�
 device_index = 1
 
 class RealtimeChat:
-    def __init__(self, resource_hub: ResourceHub, queue:EventQueue):
+    def __init__(self, resource_hub: ResourceHub, queue:PretreatQueue):
         self.queue = queue
         self.resource_hub = resource_hub
 

@@ -1,10 +1,10 @@
 from utils.utils import Captions
 from config import Config, get_model_config
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from llm import BasicModel
 from sqlite import Database
-from typing import Type
-from utils.filter import message_filiter
+from typing import Type, Optional
+# from utils.filter import message_filiter
 from dataclasses import dataclass
 from plugin import get_tools
 import importlib
@@ -12,7 +12,7 @@ import wave
 import pyaudio
 import asyncio
 import logging
-import functools
+import time
 
 logger = logging.getLogger("Muice.types")
 
@@ -29,13 +29,15 @@ def _load_model(model_config_types:str = "default") -> BasicModel:
     model.load()
     return model
 
-class BasicTTS:
+class BasicTTS(ABC):
     def __init__(self):
         self.is_playing = False
         
     @abstractmethod
-    async def generate_tts(self, text:str) -> bool:
-        '''生成TTS语音文件'''
+    async def generate_tts(self, text:str) -> Optional[str]:
+        """
+        生成 TTS 语音文件
+        """
         pass
 
     async def play_audio(self, file_path:str = './temp/tts_output.wav'):
@@ -116,7 +118,7 @@ class MessageData:
     """粉丝牌等级"""
 
 # 任务处理基类
-class BasicTask:
+class BasicTask(ABC):
     '''基本任务'''
     def __init__(self, resource_hub: ResourceHub, data:MessageData) -> None:
         self.resource_hub = resource_hub
@@ -130,47 +132,60 @@ class BasicTask:
         self.data = data
 
         self.tools = get_tools() if self.model_config.function_call else []
+        self.time = time.time()
+        
+        self.response: str = ""
+        self.tts_file: Optional[str] = None
+        self.is_saved: bool = False
+        """是否已经保存到数据库或是不需要保存"""
 
     def __lt__(self, other):
         return id(self) < id(other)
     
-    @staticmethod
-    def message_filter(func):
-        @functools.wraps(func)
-        async def wrapper(self, *args, **kwargs):
-            if message_filiter(self.data.message):
-                return await func(self, *args, **kwargs)
-            logger.warning(f"{self.data.message} 在消息预检时被过滤")
-            await self.post_response(self, "(已过滤)。啊这...要不要我们换一个话题聊？qwq", False)
-        return wrapper
+    # def __str__(self) -> str:
+    #     return "<>"
+    
+    # @staticmethod
+    # def message_filter(func):
+    #     @functools.wraps(func)
+    #     async def wrapper(self, *args, **kwargs):
+    #         if message_filiter(self.data.message):
+    #             return await func(self, *args, **kwargs)
+    #         logger.warning(f"{self.data.message} 在消息预检时被过滤")
+    #         await self.post_response(self, "(已过滤)。啊这...要不要我们换一个话题聊？qwq", False)
+    #     return wrapper
 
-    async def post_response(self, respond: str, save: bool = True):
+    @abstractmethod
+    async def pretreatment(self) -> bool:
+        """
+        消息预处理（缓存队列）
+        """
+        pass
+
+    async def post_response(self):
         """
         在直播间输出结果
         """
-        logger.info(f'[{self.data.username}] TTS处理...')
-        if not await self.tts.generate_tts(respond): return
+        if self.tts_file is None:
+            logger.warning("不存在 tts 输出！该任务不执行")
+            return
 
         if self.data.message:
             await self.captions.post(
                 self.data.message, 
                 self.data.username, 
                 self.data.userface, 
-                respond
+                self.response
             )
         else:
-            await self.captions.post(respond=respond)
+            await self.captions.post(respond=self.response)
 
-        await self.tts.play_audio()
+        await self.tts.play_audio(self.tts_file)
 
-        if save:
+        if not self.is_saved:
             await self.database.add_item(
                 self.data.username, 
                 self.data.userid, 
                 self.data.message, 
-                respond
+                self.response
             )
-
-    async def run(self):
-        '''基本任务运行入口'''
-        pass

@@ -1,41 +1,46 @@
-import asyncio
 import edge_tts
-import threading
 import logging
 import os
 import requests
+import time
 
 from pydub import AudioSegment
 from _types import BasicTTS
 from utils.utils import filter_parentheses
+from typing import Optional
+from pathlib import Path
 
 logger = logging.getLogger('Muice.TTS')
 
 class EdgeTTS(BasicTTS):
     def __init__(self, config:dict) -> None:
         self.__VOICE = "zh-CN-XiaoyiNeural"
-        self.__OUTPUT_FILE = "./temp/tts_output.mp3"
+        self.__OUTPUT_PATH = Path("./temp/tts")
         self.text = None
         self.result = True
 
-    async def generate_tts(self, text:str, proxy:str|None = 'http://127.0.0.1:7890') -> bool:
+        self.__OUTPUT_PATH.mkdir(exist_ok=True)
+
+    async def generate_tts(self, text:str, proxy:str|None = 'http://127.0.0.1:7890') -> Optional[str]:
+        output_file = str(self.__OUTPUT_PATH / f"{time.time_ns()}.mp3")
+
         try:
             communicate = edge_tts.Communicate(text, self.__VOICE, proxy = proxy)
-            await communicate.save(self.__OUTPUT_FILE)
+            await communicate.save(output_file)
         except Exception as e:
             if proxy:
                 return await self.generate_tts(text, proxy = None)
             logger.warning(f"尝试生成TTS语音文件时出现了问题: {e}")
-            return False
+            return None
 
-        if os.stat(self.__OUTPUT_FILE).st_size == 0:
+        if os.stat(output_file).st_size == 0:
             logger.warning("生成的TTS语音文件为空")
-            return False
+            return None
         
-        sound = AudioSegment.from_mp3(self.__OUTPUT_FILE)
-        sound.export(self.__OUTPUT_FILE.replace(".mp3", ".wav"), format="wav")
+        sound = AudioSegment.from_mp3(output_file)
+        sound.export(output_file.replace(".mp3", ".wav"), format="wav")
         
-        return True
+        return output_file.replace(".mp3", ".wav")
     
 
 class GPTSoVITS(BasicTTS):

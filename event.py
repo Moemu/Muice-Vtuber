@@ -1,182 +1,188 @@
 from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage,RoomEnterMessage
-from _types import *
-from typing import Type, Tuple, List, Dict
+from _types import BasicTask, MessageData, ResourceHub
+from typing import Type, Tuple, List, Optional
 from ui import WebUI
 from utils.memory import generate_history
 from utils.utils import get_avatar_base64, message_precheck, screenshot
 from llm.utils.auto_system_prompt import auto_system_prompt
 import random,asyncio,time
+from threading import Thread
 
 import logging
 
 logger = logging.getLogger('Muice.Event')
 
-# 任务队列
-class EventQueue:
-    def __init__(self, first_run=True) -> None:
-        self.queue = asyncio.PriorityQueue(maxsize=7)
+class AsyncQueueThread(Thread):
+    def __init__(self, pretreat_queue: "PretreatQueue"):
+        super().__init__(daemon=True)
+        self.pretreat_queue = pretreat_queue
+
+    def run(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.pretreat_queue.run_forever())
+
+
+class PretreatQueue:
+    """
+    预处理队列
+    """
+    def __init__(self ,first_run=True) -> None:
+        self._queue = asyncio.PriorityQueue(maxsize=7)
+        self.post_queue = PostProcessQueue()
+
+        self.DECAY_FACTOR = 0.5
+        """每事件衰减因子（每轮处理后添加多少优先数）"""
+        self.MAX_PRIORITY = 15
+        """最大优先数限制，等于或大于此优先数的任务将被丢弃"""
+
         if first_run:
-            self.leisure_task: LeisureTask | None = None
+            self.leisure_task: Optional[LeisureTask] = None
         self.is_running = False
+        self.idle_time = 0
         self.first_run = first_run
-        self.task_expiry: Dict[int, float] = {
-            1: 300.0,   # 高优先级任务（如上舰事件）最长保留 5 分钟
-            10: 30.0,   # 进入房间事件最长保留 30 秒
-        }
-        self.DECAY_FACTOR = 0.1
+
+    async def _queue_get(self) -> Tuple[float, BasicTask]:
+        return await self._queue.get()
+    
+    async def _queue_put(self, priority:float, task: BasicTask):
+        await self._queue.put((priority, task))
+
+    async def _process_queue(self) -> List[Tuple[float, BasicTask]]:
+        """
+        获取队列内容并过滤优先级超过阈值的任务
+        """
+        current_time = time.time()
+        queue_items:List[Tuple[float, BasicTask]] = []
+        
+        while not self._queue.empty():
+            priority, task = await self._queue_get()
+            priority += self.DECAY_FACTOR
+
+            # 动态优先级过滤
+            if priority >= self.MAX_PRIORITY:
+                logger.warning(f"任务过滤 {task} (动态优先级={priority:.1f})")
+                continue
+
+            queue_items.append((priority, task))
+        
+        return queue_items
 
     def get_priority_snapshot(self):
         """
-        非异步方法：返回当前队列中所有任务的优先级和时间戳（只做观察，不修改队列）
+        观察目前的队列情况
         """
-        snapshot = list(self.queue._queue)  # type:ignore
-        return [(item[0], item[1], str(item[2])) for item in snapshot]
+        snapshot = list(self._queue._queue)  # type:ignore
+        logger.debug([(item[0], item[1]) for item in snapshot])
+    
+    async def _get_a_leisure_task(self):
+        """
+        尝试发布一个空闲任务
+        """
+        self.idle_time += 0.5
+        if self.idle_time >= 50 and random.random() < 0.05:
+            # 5% 概率决定任务类型
+            if random.random() < 0.05:
+                logger.info('发布一个读屏任务...')
+                await self.__create_a_read_screen_task()
+            else:
+                logger.info('发布一个闲时任务...')
+                await self.__create_a_leisure_task()
+
+            self.idle_time = 0  # 重置空闲时间
 
     async def __run(self):
-        """任务处理主循环（完整版）"""
+        """任务处理主循环"""
         self.is_running = True
-        idle_time = 0
 
         while self.is_running:
-            # 空闲任务生成逻辑（保留原有逻辑）
-            if self.queue.empty():
-                await asyncio.sleep(0.5)
-                idle_time += 0.5
-                if idle_time >= 50 and random.random() < 0.05:
-                    # 5% 概率决定任务类型
-                    if random.random() < 0.05:
-                        logger.info('发布一个读屏任务...')
-                        await self.__create_a_read_screen_task()
-                    else:
-                        logger.info('发布一个闲时任务...')
-                        await self.__create_a_leisure_task()
+            await asyncio.sleep(0.5)
 
-                    idle_time = 0  # 重置空闲时间
+            # 当主处理队列已满时，应继续等待
+            if self.post_queue.is_queue_full:
                 continue
 
-            # ----------------------------
-            # 动态优先级处理核心
-            # ----------------------------
-            current_time = time.time()
-            items = []
-
-            # 1. 取出所有任务并过滤过期
-            while not self.queue.empty():
-                initial_priority, ts, task = await self.queue.get()
-                expiry = self.task_expiry.get(initial_priority, float('inf'))
-                
-                if current_time - ts > expiry:
-                    logger.info(f"执行前丢弃过期任务: {task}")
-                    continue
-                
-                # 计算动态优先级
-                wait_time = current_time - ts
-                dynamic_priority = initial_priority + wait_time * self.DECAY_FACTOR
-                items.append( (dynamic_priority, initial_priority, ts, task) )
-
-            # 2. 如果没有有效任务则继续循环
-            if not items:
+            # 当队列为空时，尝试生成闲时任务
+            if self._queue.empty():
+                await self._get_a_leisure_task()
                 continue
 
-            # 3. 按动态优先级排序
-            items.sort(key=lambda x: (x[0], x[1]))  # 先按动态优先级，再按时间戳
+            # 动态优先级算法
+            # 1. 取出所有任务，计算动态优先级并过滤优先数较大的任务
+            if not (items := await self._process_queue()):
+                continue
 
-            # 4. 处理最高优先级任务
-            _, initial_priority, ts, task = items[0]
+            # 2. 按动态优先级排序
+            items.sort(key=lambda x: (x[0], x[1]))
+
+            # 3. 处理最高优先级任务
+            priority, task = items[0]
+
             try:
-                logger.info(f"执行任务: {task} (动态优先级={items[0][0]:.1f})")
-                await task.run()
+                logger.info(f"执行任务: {task} (动态优先级={priority})")
+                await task.pretreatment()
+                await self.post_queue.put(priority, task)
             except Exception as e:
                 logger.error(f"任务执行失败: {e}", exc_info=True)
 
-            # 5. 将剩余任务重新入队（保持原始格式）
+            # 4. 将剩余任务重新入队（保持原始格式）
             for item in items[1:]:
-                await self.queue.put( (item[1], item[2], item[3]) )
+                await self._queue_put(item[0], item[1])
 
-            # 6. 重置空闲时间
-            idle_time = 0
+    async def run_forever(self):
+        """主运行循环（提供给线程运行）"""
+        self.is_running = True
+        await self.post_queue.start_async()  # 改为 await 启动
+        await self.__run()
 
-    async def put(self, priority: int, event):
-        """入队方法（核心修改点）"""
-        timestamp = time.time()
-        new_item = (priority, timestamp, event)  # 元组结构: (初始优先级, 时间戳, 任务对象)
-
-        if not self.queue.full():
-            await self.queue.put(new_item)
-            logger.debug(f"入队成功: {event} (优先级={priority})")
+    async def put(self, priority: int, task: BasicTask):
+        """入队方法"""
+        if not self._queue.full():
+            await self._queue_put(priority, task)
+            logger.debug(f"入队成功: {task} (优先级={priority})")
             return
 
-        # ----------------------------
-        # 队列已满时的替换策略（动态优先级版）
-        # ----------------------------
-        current_time = time.time()
-        temp_items = []
-
-        # 1. 取出所有任务，计算动态优先级并检测过期
-        while not self.queue.empty():
-            initial_priority, ts, task = await self.queue.get()
-            expiry = self.task_expiry.get(initial_priority, float('inf'))
-            
-            # 淘汰过期任务
-            if current_time - ts > expiry:
-                logger.info(f"丢弃过期任务: {task} (存活时间={current_time - ts:.1f}s)")
-                continue
-                
-            # 计算动态优先级
-            wait_time = current_time - ts
-            dynamic_priority = initial_priority + wait_time * self.DECAY_FACTOR
-            temp_items.append( (dynamic_priority, initial_priority, ts, task) )
+        # 队列已满时的替换策略
+        # 1. 取出所有任务，计算动态优先级并过滤优先数较大的任务
+        queue_items = await self._process_queue()
 
         # 2. 添加新任务到临时列表
-        wait_time_new = 0  # 新任务等待时间为0
-        dynamic_priority_new = priority + wait_time_new * self.DECAY_FACTOR
-        temp_items.append( (dynamic_priority_new, priority, timestamp, event) )
+        queue_items.append((priority, task))
 
-        # 3. 按动态优先级排序（数值越小越优先）
-        temp_items.sort(key=lambda x: (x[0], x[1]))
+        # 3. 按动态优先级排序（优先级数值越小、时间越晚越优先）
+        queue_items.sort(key=lambda x: (x[0], -x[1].time))
 
-        # 4. 保留前 (maxsize-1) 个任务，最后一个位置给新任务竞争
-        kept_items = temp_items[:self.queue.maxsize-1]
-        candidates = temp_items[self.queue.maxsize-1:]
+        # 4. 抛弃优先级数值最大、时间最早的事件
+        queue_items.pop()
 
-        # 5. 选择动态优先级最低的任务与新任务竞争
-        if candidates:
-            worst_item = max(candidates, key=lambda x: x[0])
-            if new_item[0] < worst_item[0]:  # 新任务优先级更高
-                kept_items.append( (dynamic_priority_new, priority, timestamp, event) )
-                logger.warning(f"替换低优先级任务: {worst_item[3]} → {event}")
-            else:
-                logger.warning(f"忽略新任务: {event} (队列中任务优先级更高)")
-        else:
-            kept_items.append( (dynamic_priority_new, priority, timestamp, event) )
+        logger.debug(f"队列满处理后状态:\n{self.get_priority_snapshot()}")
 
-        # 6. 重新入队（按初始优先级和时间戳）
-        for item in kept_items:
-            await self.queue.put( (item[1], item[2], item[3]) )  # 重新使用原始格式
-
-    def start(self) -> bool:
+    def start(self):
         if self.is_running:
             logger.info('事件队列已在运行中')
             return False
         if not self.first_run:
             self.__init__(False)
         self.is_running = True
-        
-        asyncio.create_task(self.__run())  
+
+        # 启动后台线程，运行事件队列
+        AsyncQueueThread(self).start()
 
         logger.info('事件队列已启动')
-        return self.is_running
+        return True
 
         
     def stop(self):
         self.is_running = False
         self.first_run = False
+        self.post_queue.is_running = False
         logger.info('事件队列已停止')
 
     async def __create_a_leisure_task(self):
         """
         发布一个闲时任务
         """
+        if not self.leisure_task: return
         await self.put(10, self.leisure_task)
 
     async def __create_a_read_screen_task(self):
@@ -187,82 +193,176 @@ class EventQueue:
         data = MessageData()
         await self.put(10, ReadScreenTask(self.leisure_task.resource_hub, data))
 
+class PostProcessQueue:
+    """
+    正式处理队列
+    """
+    def __init__(self) -> None:
+        self._queue = asyncio.PriorityQueue(maxsize=1)  # 队列长度1
+        self.is_running = False
+        self.is_task_running = False
+
+    async def _queue_get(self) -> Tuple[float, BasicTask]:
+        return await self._queue.get()
+    
+    async def _queue_put(self, priority:float, task: BasicTask):
+        await self._queue.put((priority, task))
+    
+    @property
+    def is_queue_full(self) -> bool:
+        return self._queue.full()
+
+    async def __run(self):
+        """主处理循环"""
+        self.is_running = True
+        while self.is_running:
+            if self._queue.empty():
+                await asyncio.sleep(0.5)
+                continue
+
+            self.is_task_running = True
+
+            try:
+                priority, task = await self._queue_get()
+                logger.info(f"正式处理任务: {task}")
+                await task.post_response()
+            except Exception as e:
+                logger.error(f"正式处理失败: {e}", exc_info=True)
+            
+            self.is_task_running = False
+
+    async def put(self, priority: float, task:BasicTask):
+        """入队方法"""        
+        if self._queue.full():
+            # 队列满时直接替换
+            old_task = await self._queue_get()
+            logger.warning(f"正式队列替换旧任务: {old_task[1]} → {task}")
+        
+        await self._queue_put(priority, task)
+
+    async def start_async(self):
+        """提供异步启动方法，供 PretreatQueue 调用"""
+        if self.is_running:
+            return
+        self.is_running = True
+        asyncio.create_task(self.__run())
+
+    def stop(self):
+        self.is_running = False
+
+
 class DanmuTask(BasicTask):
     '''弹幕任务'''
-    @BasicTask.message_filter
-    async def run(self):
+    # @BasicTask.message_filter
+    async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}]：{self.data.message}')
         history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid)
         logger.debug(f'[{self.data.username}] 获取到的历史记录: {history}')
         
         prompt = f'<{self.data.username}> {self.data.message}'
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
-        respond = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
-        logger.info(f'[{self.data.username}] {self.data.message} -> {respond}')
+        self.response = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
+        logger.info(f'[{self.data.username}] {self.data.message} -> {self.response}')
 
-        await self.post_response(respond)
-        logger.info(f'[{self.data.username}] 事件处理结束')
+        logger.info(f'[{self.data.username}] TTS处理...')
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
+        
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+        return True
 
 class GiftTask(BasicTask):
     '''礼物任务'''
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}] 赠送了 {self.data.gift_name} x {self.data.gift_num} 总价值: {self.data.total_value}')
-        respond = f"感谢 {self.data.username} 赠送的 {self.data.gift_name} 喵，雪雪最喜欢你了喵！"
-        logger.info(f'[{self.data.username}] {self.data.gift_name} -> {respond}')
+        self.response = f"感谢 {self.data.username} 赠送的 {self.data.gift_name} 喵，雪雪最喜欢你了喵！"
+        logger.info(f'[{self.data.username}] {self.data.gift_name} -> {self.response}')
 
-        await self.post_response(respond, save=False)
+        logger.info(f'[{self.data.username}] TTS处理...')
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
+
         await self.database.add_gift(self.data.username, self.data.userid, self.data.gift_name, self.data.total_value)
-        logger.info(f'[{self.data.username}] 事件处理结束')
+        self.is_saved = True
+
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+        return True
 
 class SuperChatTask(BasicTask):
     '''醒目留言任务'''
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}] 赠送了 ¥{self.data.total_value} 醒目留言：{self.data.message}')
         history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid)
 
         prompt = f'<{self.data.username}> {self.data.message}'
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
         model_output = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
-        respond = f"感谢 {self.data.username} 的SuperChat。\n" + model_output
-        logger.info(f'[{self.data.username}] 醒目留言 -> {respond}')
+        self.response = f"感谢 {self.data.username} 的SuperChat。\n" + model_output
+        logger.info(f'[{self.data.username}] 醒目留言 -> {self.response}')
 
-        await self.post_response(respond)
+        logger.info(f'[{self.data.username}] TTS处理...')
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
+
         await self.database.add_gift(self.data.username, self.data.userid, "醒目留言", self.data.total_value)
-        logger.info(f'[{self.data.username}] 事件处理结束')
+
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+        return True
 
 class BuyGuardTask(BasicTask):
     '''上舰任务'''
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 购买了大航海等级 {self.data.guard_level}')
-        respond = f'感谢 {self.data.username} 的舰长喵！会有什么神奇的事情发生呢？'
+        self.response = f'感谢 {self.data.username} 的舰长喵！会有什么神奇的事情发生呢？'
 
-        await self.post_response(respond, save=False)
+        logger.info(f'[{self.data.username}] TTS处理...')
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
+
         await self.database.add_gift(self.data.username, self.data.userid, f'大航海等级{self.data.guard_level}', self.data.total_value)
+        self.is_saved = True
 
-        logger.info(f'[{self.data.username}] 事件处理结束')
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+        return True
 
 class LeisureTask(BasicTask):
-    async def run(self):
+    async def pretreatment(self) -> bool:
         # history = self.database.get_history()
         active_prompts = ['<生成推文: 胡思乱想>', '<生成推文: AI生活>', '<生成推文: AI思考>', '<生成推文: 表达爱意>', '<生成推文: 情感建议>']
         prompt = random.choice(active_prompts)
 
         system = auto_system_prompt(self.data.message) if self.leisure_model.config.auto_system_prompt else self.leisure_model.config.system_prompt
-        respond = await self.leisure_model.ask(prompt, history=[], system=system)
+        self.response = await self.leisure_model.ask(prompt, history=[], system=system)
 
-        await self.post_response(respond, save=False)
-        await self.database.add_item('闲时任务', '0', prompt, respond)
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
+        
+        await self.database.add_item('闲时任务', '0', prompt, self.response)
+        self.is_saved = True
+
+        return True
 
 class EnterRoomTask(BasicTask):
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 进入房间')
-        respond = f"欢迎 {self.data.username} 进入到直播间喵"
+        self.response = f"欢迎 {self.data.username} 进入到直播间喵"
 
-        await self.post_response(respond, save=False)
-        logger.info(f'[{self.data.username}] 事件处理结束')
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
+
+        self.is_saved = True
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+
+        return True
 
 class RefreshTask(BasicTask):
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 请求刷新')
         history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid, user_only=True)
         logger.debug(f'获取到的历史记录: {history}')
@@ -270,61 +370,69 @@ class RefreshTask(BasicTask):
         prompt = history[-1].danmu
         history = history[:-1]
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model.config.system_prompt
-        respond = await self.model.ask(prompt, history=history, tools=self.tools, system=system) or '(已过滤)'
-        logger.info(f'[{self.data.username}] {prompt} -> {respond}')
+        self.response = await self.model.ask(prompt, history=history, tools=self.tools, system=system) or '(已过滤)'
+        logger.info(f'[{self.data.username}] {prompt} -> {self.response}')
+
+        self.tts_file = await self.tts.generate_tts(self.response)
+        if not self.tts_file:
+            return False
 
         await self.database.remove_last_item(self.data.userid)
-        await self.post_response(respond, save=False)
-        await self.database.add_item(self.data.username, self.data.userid, prompt, respond)
-        logger.info(f'[{self.data.username}] 事件处理结束')
+        await self.database.add_item(self.data.username, self.data.userid, prompt, self.response)
+        self.is_saved = True
+
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+
+        return True
 
 class CleanMemoryTask(BasicTask):
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 请求清空对话历史')
         await self.database.unavailable_item(self.data.userid)
         logger.info(f'{self.data.username} 对话历史已清空')
-        respond = '对话历史已清空'
+        self.response = '对话历史已清空'
 
         logger.info(f'{self.data.username} TTS处理...')
-        if not await self.tts.generate_tts(respond): return
-        await self.captions.post(respond=respond)
-        await self.tts.play_audio()
+        if not await self.tts.generate_tts(self.response): return False
 
-        logger.info(f'[{self.data.username}] 事件处理结束')
+        self.is_saved = True
+        logger.info(f'[{self.data.username}] 事件预处理结束')
+
+        return True
 
 class ReadScreenTask(BasicTask):
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info('[读屏任务] 开始读取屏幕')
         respond = '让我们看一下沐沐在干什么...'
-        if not await self.tts.generate_tts(respond): return
+        if not await self.tts.generate_tts(respond): return False
         await self.captions.post(respond=respond)
         await self.tts.play_audio()
 
         screenshot()
         image_info = await self.multimodal.ask(prompt="用简单的一段话描述一下这张图片", history=[], images=['./temp/screenshot.png'], stream=False)
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
-        respond = await self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}>', history=[], system=system) or '(已过滤)'
+        self.respond = await self.model.ask(f'<读屏任务-沐沐的屏幕内容: {image_info}>', history=[], system=system) or '(已过滤)'
         logger.info(f'[读屏任务] <读屏任务-沐沐的屏幕内容: {image_info}> -> {respond}')
 
-        await self.post_response(respond, save=False)
         await self.database.add_item('Muice', '0', f'<读屏任务-沐沐的屏幕内容: {image_info}>', respond)
 
         logger.info(f'[读屏任务] 事件处理结束')
+        return True
 
 class DevMicrophoneTask(BasicTask):
-    async def run(self):
+    async def pretreatment(self) -> bool:
         logger.info(f'[Dev] {self.data.message}')
 
         prompt = f'<{self.data.username}> {self.data.message}'
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
         history = await generate_history(self.database, self.data.message, '沐沐')
-        respond = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
-        logger.info(f'[Dev] {self.data.message} -> {respond}')
+        self.response = await self.model.ask(prompt=prompt, history=history, stream=False, tools=self.tools, system=system) or '(已过滤)'
+        logger.info(f'[Dev] {self.data.message} -> {self.response}')
 
-        await self.post_response(respond, save=False)
-        await self.database.add_item("沐沐", "0", self.data.message, respond)
-
+        await self.database.add_item("沐沐", "0", self.data.message, self.response)
+        self.is_saved = True
         logger.info(f'[{self.data.username}] 事件处理结束')
+        return True
 
 # WebUI事件处理(总事件处理)
 class WebUIEventHandler:
