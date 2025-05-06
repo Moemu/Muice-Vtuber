@@ -1,5 +1,6 @@
 from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage,RoomEnterMessage
-from _types import BasicTask, MessageData, ResourceHub
+from _types import BasicTask, MessageData
+from resources import Resources
 from typing import Type, Tuple, List, Optional
 from ui import WebUI
 from utils.memory import generate_history
@@ -61,7 +62,7 @@ class PretreatQueue:
 
             # 动态优先级过滤
             if priority >= self.MAX_PRIORITY:
-                logger.warning(f"任务过滤 {task} (动态优先级={priority:.1f})")
+                logger.warning(f"任务 {task} 被过滤(动态优先级={priority:.1f})")
                 continue
 
             queue_items.append((priority, task))
@@ -190,8 +191,7 @@ class PretreatQueue:
         发布了一个读屏任务
         """
         if not self.leisure_task: return
-        data = MessageData()
-        await self.put(10, ReadScreenTask(self.leisure_task.resource_hub, data))
+        await self.put(10, ReadScreenTask(MessageData()))
 
 class PostProcessQueue:
     """
@@ -256,7 +256,7 @@ class DanmuTask(BasicTask):
     # @BasicTask.message_filter
     async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}]：{self.data.message}')
-        history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid)
+        history = await generate_history(self.database, self.data.message, self.data.userid)
         logger.debug(f'[{self.data.username}] 获取到的历史记录: {history}')
         
         prompt = f'<{self.data.username}> {self.data.message}'
@@ -294,7 +294,7 @@ class SuperChatTask(BasicTask):
     '''醒目留言任务'''
     async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}] 赠送了 ¥{self.data.total_value} 醒目留言：{self.data.message}')
-        history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid)
+        history = await generate_history(self.database, self.data.message, self.data.userid)
 
         prompt = f'<{self.data.username}> {self.data.message}'
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
@@ -364,7 +364,7 @@ class EnterRoomTask(BasicTask):
 class RefreshTask(BasicTask):
     async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 请求刷新')
-        history = await generate_history(self.resource_hub.database, self.data.message, self.data.userid, user_only=True)
+        history = await generate_history(self.database, self.data.message, self.data.userid, user_only=True)
         logger.debug(f'获取到的历史记录: {history}')
 
         prompt = history[-1].danmu
@@ -436,16 +436,13 @@ class DevMicrophoneTask(BasicTask):
 
 # WebUI事件处理(总事件处理)
 class WebUIEventHandler:
-    def __init__(self, resource_hub: ResourceHub, webui:WebUI, danmu, queue, realtimechat) -> None:
-        self.config = resource_hub.config
-        self.model = resource_hub.model
+    def __init__(self, webui:WebUI, danmu, queue, realtimechat) -> None:
+        self.resources = Resources.get()
         self.webui = webui
         self.danmu = danmu
-        self.captions = resource_hub.captions
         self.queue = queue
         # self.bot = resource_hub.bot
         self.realtimechat = realtimechat
-        self.model = resource_hub.model
         self.chat_history = []
 
     async def start_all(self):
@@ -475,7 +472,7 @@ class WebUIEventHandler:
         if self.webui.status.llm:
             self.webui.ui.notify('不能重复连接！',type='negative')
             return False
-        if self.model.is_running:
+        if self.resources.model.is_running:
             self.webui.change_LLM_status(1)
         else:
             self.webui.ui.notify('无法连接至LLM',type='negative')
@@ -497,7 +494,7 @@ class WebUIEventHandler:
         if self.webui.status.captions:
             self.webui.ui.notify('不能重复连接！',type='negative')
             return False
-        if self.captions.connect():
+        if self.resources.captions.connect():
             self.webui.change_captions_status(1)
         else:
             self.webui.ui.notify('无法连接至字幕组件',type='negative')
@@ -506,7 +503,7 @@ class WebUIEventHandler:
         if self.webui.status.realtime_chat:
             self.webui.ui.notify('不能重复启动！',type='negative')
             return False
-        if not self.model.is_running:
+        if not self.resources.model.is_running:
             self.webui.ui.notify('LLM未连接',type='negative')
             return
         self.webui.change_realtime_chat_status(1)
@@ -558,12 +555,8 @@ CommandTask.register('清空对话历史', CleanMemoryTask, 10)
 
 # 弹幕事件处理分发
 class DanmuEventHandler:
-    def __init__(self, resource_hub:ResourceHub, quene, ui:WebUI) -> None:
-        self.resource_hub = resource_hub
-        self.model = resource_hub.model
-        self.tts = resource_hub.tts
-        self.captions = resource_hub.captions
-        self.database = resource_hub.database
+    def __init__(self, quene, ui:WebUI) -> None:
+        self.resources_hub = Resources.get()
         self.quene = quene
         self.ui = ui
 
@@ -582,13 +575,13 @@ class DanmuEventHandler:
         userface = danmu.uface
         userid = danmu.open_id
         fans_medal_level = danmu.fans_medal_level
-        if not all((self.model.is_running, self.captions.is_connecting, message_precheck(message))):
+        if not all((self.resources_hub.model.is_running, self.resources_hub.captions.is_connecting, message_precheck(message))):
             return
         userface = await get_avatar_base64(userface + '@250x250')
 
         data = MessageData(username, userid, userface, message)
         task_cls, priority = CommandTask.get_task(message)
-        task = task_cls(self.resource_hub, data)
+        task = task_cls(data)
         # priority = 4 if fans_medal_level else priority
         await self.quene.put(priority, task)
 
@@ -601,7 +594,7 @@ class DanmuEventHandler:
         gift_num = gift.gift_num
         total_value = gift.price * gift.gift_num / 1000
         data = MessageData(username, userid, gift_name=gift_name, gift_num=gift_num, total_value=total_value)
-        task = GiftTask(self.resource_hub, data)
+        task = GiftTask(data)
         await self.quene.put(3, task)
 
     async def SuperChatEvent(self, superchat:SuperChatMessage):
@@ -612,7 +605,7 @@ class DanmuEventHandler:
         rmb = float(superchat.rmb)
         userface = await get_avatar_base64(userface + '@250x250')
         data = MessageData(username, userid, userface, message, total_value=rmb)
-        task = SuperChatTask(self.resource_hub, data)
+        task = SuperChatTask(data)
         await self.quene.put(1, task)
 
     async def GuardBuyEvent(self, message:GuardBuyMessage):
@@ -621,11 +614,11 @@ class DanmuEventHandler:
         guard_level = message.guard_level
         price = message.price / 1000
         data = MessageData(username=username, userid=userid, guard_level=guard_level, total_value=price)
-        task = BuyGuardTask(self.resource_hub, data)
+        task = BuyGuardTask(data)
         await self.quene.put(1, task)
 
     async def EnterRoomEvent(self, message:RoomEnterMessage):
         username = message.uname
         data = MessageData(username=username)
-        task = EnterRoomTask(self.resource_hub, data)
+        task = EnterRoomTask(data)
         await self.quene.put(10, task)

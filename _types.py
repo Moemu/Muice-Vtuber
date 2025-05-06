@@ -1,13 +1,10 @@
-from utils.utils import Captions
-from config import Config, get_model_config
+from functools import total_ordering
 from abc import abstractmethod, ABC
-from llm import BasicModel
-from sqlite import Database
-from typing import Type, Optional
+from typing import Optional
+from resources import Resources
 # from utils.filter import message_filiter
 from dataclasses import dataclass
 from plugin import get_tools
-import importlib
 import wave
 import pyaudio
 import asyncio
@@ -15,19 +12,6 @@ import logging
 import time
 
 logger = logging.getLogger("Muice.types")
-
-def _load_model(model_config_types:str = "default") -> BasicModel:
-    """
-    初始化模型类
-    """
-    model_config = get_model_config(model_config_types = model_config_types)
-    module_name = f"llm.{model_config.loader}"
-    module = importlib.import_module(module_name)
-    ModelClass:Type[BasicModel]|None = getattr(module, model_config.loader, None)
-    if not ModelClass: raise ValueError(f"Model {model_config.loader} Not Found!")
-    model = ModelClass(model_config)
-    model.load()
-    return model
 
 class BasicTTS(ABC):
     def __init__(self):
@@ -67,32 +51,7 @@ class BasicTTS(ABC):
         p.terminate()
         self.is_playing = False
 
-class ResourceHub:
-    def __init__(self, config:Config, model:BasicModel, leisure_model:BasicModel, multimodal:BasicModel, tts:BasicTTS, captions:Captions, database:Database) -> None:
-        self.config = config
-        self.model = model
-        self.leisure_model = leisure_model
-        self.multimodal = multimodal
-        self.tts = tts
-        self.captions = captions
-        self.database = database
-
-    @staticmethod
-    def load_resource():
-        config = Config()
-
-        tts_module = importlib.import_module(f"tts")
-        tts = getattr(tts_module, config.TTS_LOADER)(config.TTS_CONFIG)
-
-        model = _load_model()
-        leisure_model = _load_model("leisure")
-        multimodal = _load_model("multimodal")
-
-        captions = Captions()
-        database = Database()
-        return ResourceHub(config, model, leisure_model, multimodal, tts, captions, database)
-
-@dataclass(frozen=True)
+@dataclass
 class MessageData:
     """提取后的消息体"""
     username: str = ""
@@ -117,30 +76,53 @@ class MessageData:
     fans_medal_level: int = 0
     """粉丝牌等级"""
 
+    def __add__(self, other: "MessageData") -> "MessageData":
+        self.message += f"。{self.message}"
+        return self
+
 # 任务处理基类
+@total_ordering
 class BasicTask(ABC):
     '''基本任务'''
-    def __init__(self, resource_hub: ResourceHub, data:MessageData) -> None:
-        self.resource_hub = resource_hub
-        self.model = resource_hub.model
-        self.model_config = self.model.config
-        self.leisure_model = resource_hub.leisure_model
-        self.multimodal = resource_hub.multimodal
-        self.tts = resource_hub.tts
-        self.captions = resource_hub.captions
-        self.database = resource_hub.database
-        self.data = data
+    def __init__(self, data:MessageData) -> None:
+        self.resources = Resources.get()
+        """资源"""
+        self.tts = self.resources.tts
+        self.model = self.resources.model
+        self.captions = self.resources.captions
+        self.leisure_model = self.resources.leisure_model
+        self.database = self.resources.database
+        self.multimodal = self.resources.multimodal
 
+        self.model_config = self.resources.model.config
+        """模型配置"""
+        self.data = data
+        """消息内容"""
         self.tools = get_tools() if self.model_config.function_call else []
+        """Function Calls 工具列表"""
         self.time = time.time()
-        
+        """事件创建时间"""
         self.response: str = ""
+        """模型响应"""
         self.tts_file: Optional[str] = None
+        """TTS输出文件路径"""
         self.is_saved: bool = False
         """是否已经保存到数据库或是不需要保存"""
 
-    def __lt__(self, other):
-        return id(self) < id(other)
+    def __lt__(self, other: "BasicTask") -> bool:
+        return self.time < other.time
+    
+    def __eq__(self, other: "BasicTask") -> bool:
+        return id(self) == id(other)
+    
+    def __add__(self, other: "BasicTask") -> "BasicTask":
+        """
+        重载 add 方法来实现消息合并
+
+        请注意: self 必须小于(早于) other 否则容易造成顺序混乱
+        """
+        self.data += other.data
+        return self
     
     # def __str__(self) -> str:
     #     return "<>"
@@ -171,19 +153,19 @@ class BasicTask(ABC):
             return
 
         if self.data.message:
-            await self.captions.post(
+            await self.resources.captions.post(
                 self.data.message, 
                 self.data.username, 
                 self.data.userface, 
                 self.response
             )
         else:
-            await self.captions.post(respond=self.response)
+            await self.resources.captions.post(respond=self.response)
 
-        await self.tts.play_audio(self.tts_file)
+        await self.resources.tts.play_audio(self.tts_file)
 
         if not self.is_saved:
-            await self.database.add_item(
+            await self.resources.database.add_item(
                 self.data.username, 
                 self.data.userid, 
                 self.data.message, 

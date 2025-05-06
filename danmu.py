@@ -2,6 +2,7 @@ from blivedm import blivedm
 from blivedm.blivedm.models import open_live as open_models
 from blivedm.blivedm.models import web as web_models
 from event import DanmuEventHandler
+from resources import Resources
 import logging,asyncio,threading,time
 
 logger = logging.getLogger('Muice.Danmu')
@@ -41,8 +42,9 @@ class DanmuHandler(blivedm.BaseHandler):
         asyncio.run_coroutine_threadsafe(self.EventHandler.SuperChatEvent(message), loop)
 
 class Danmu:
-    def __init__(self, resource_hub, danmuhandler, webui = None):
-        self.config = resource_hub.config
+    def __init__(self, danmuhandler, webui = None):
+        resource = Resources.get()
+        self.config = resource.config
         self.__client_process = False
         self.loop = None
         self.handler = danmuhandler
@@ -64,7 +66,7 @@ class Danmu:
             self.client.stop()
             await self.client.join()
         finally:
-            await self.client.stop_and_close()  # type:ignore
+            await self.client.stop_and_close()
 
     def __start_client(self):
         self.loop = asyncio.new_event_loop()
