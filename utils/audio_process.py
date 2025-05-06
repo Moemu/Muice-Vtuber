@@ -1,6 +1,3 @@
-from funasr import AutoModel
-from funasr.utils.postprocess_utils import rich_transcription_postprocess
-import torch
 import logging
 
 logger = logging.getLogger('Muice.SpeechRecognition')
@@ -10,6 +7,8 @@ class SpeechRecognitionPipeline:
 
     @classmethod
     def load_model(cls, model_path):
+        import torch
+        from funasr import AutoModel
         logger.info("Loading speech recognition model...")
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logger.info("Using device: {}".format(device))
@@ -38,6 +37,8 @@ class SpeechRecognitionPipeline:
         logger.info("Model loaded successfully.")
 
     async def generate_speech(self, file_path):
+        from funasr.utils.postprocess_utils import rich_transcription_postprocess
+        
         logger.info("Generating speech...")
         if not self._model:
             return
