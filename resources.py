@@ -1,8 +1,8 @@
-from ._types import BasicTTS
+from _types import BasicTTS
 from config import Config
 from llm import BasicModel
 from utils.utils import Captions
-from .sqlite import Database
+from sqlite import Database
 from config import get_model_config
 from typing import Type, Optional
 

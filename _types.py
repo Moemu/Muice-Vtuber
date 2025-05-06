@@ -1,7 +1,6 @@
 from functools import total_ordering
 from abc import abstractmethod, ABC
 from typing import Optional
-from resources import Resources
 # from utils.filter import message_filiter
 from dataclasses import dataclass
 from plugin import get_tools
@@ -77,14 +76,18 @@ class MessageData:
     """粉丝牌等级"""
 
     def __add__(self, other: "MessageData") -> "MessageData":
-        self.message += f"。{self.message}"
+        self.message += f"。{other.message}"
         return self
+    
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(userid={self.userid}, message={self.message})"
 
 # 任务处理基类
 @total_ordering
 class BasicTask(ABC):
     '''基本任务'''
     def __init__(self, data:MessageData) -> None:
+        from resources import Resources
         self.resources = Resources.get()
         """资源"""
         self.tts = self.resources.tts
@@ -109,6 +112,9 @@ class BasicTask(ABC):
         self.is_saved: bool = False
         """是否已经保存到数据库或是不需要保存"""
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(time={self.time}, data={self.data})"
+
     def __lt__(self, other: "BasicTask") -> bool:
         return self.time < other.time
     
@@ -116,11 +122,6 @@ class BasicTask(ABC):
         return id(self) == id(other)
     
     def __add__(self, other: "BasicTask") -> "BasicTask":
-        """
-        重载 add 方法来实现消息合并
-
-        请注意: self 必须小于(早于) other 否则容易造成顺序混乱
-        """
         self.data += other.data
         return self
     
