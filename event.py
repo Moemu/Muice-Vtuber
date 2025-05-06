@@ -6,7 +6,7 @@ from ui import WebUI
 from utils.memory import generate_history
 from utils.utils import get_avatar_base64, message_precheck, screenshot
 from llm.utils.auto_system_prompt import auto_system_prompt
-import random,asyncio,time
+import random,asyncio
 from threading import Thread
 
 import logging
@@ -49,6 +49,30 @@ class PretreatQueue:
     async def _queue_put(self, priority:float, task: BasicTask):
         await self._queue.put((priority, task))
 
+    def _merge_tasks(self, queue_items:List[Tuple[float, BasicTask]]) -> List[Tuple[float, BasicTask]]:
+        """
+        合并队列中来自相同用户的任务
+
+        请注意: tasks必须是已按时间顺序排序的
+        """
+        if len(queue_items) < 2:
+            return queue_items
+
+        merged_tasks:List[Tuple[float, BasicTask]] = [queue_items[0]]
+
+        for prioritiy, task in queue_items[1:]:
+            last_priority, last_task = merged_tasks[-1]
+            if task.data.userid == last_task.data.userid:
+                # 合并到上一个任务中（顺序保证前小于后）
+                merged_task = last_task + task
+                merged_tasks[-1] = (last_priority, merged_task)
+                logger.debug(f"合并任务 {last_task} + {task}")
+            else:
+                # 不同用户，直接加入列表
+                merged_tasks.append((prioritiy, task))
+
+        return merged_tasks
+
     async def _process_queue(self) -> List[Tuple[float, BasicTask]]:
         """
         获取队列内容并过滤优先级超过阈值的任务
@@ -66,6 +90,8 @@ class PretreatQueue:
                 continue
 
             queue_items.append((priority, task))
+
+        queue_items = self._merge_tasks(queue_items)
         
         return queue_items
 
@@ -257,7 +283,6 @@ class DanmuTask(BasicTask):
     async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}]：{self.data.message}')
         history = await generate_history(self.database, self.data.message, self.data.userid)
-        logger.debug(f'[{self.data.username}] 获取到的历史记录: {history}')
         
         prompt = f'<{self.data.username}> {self.data.message}'
         system = auto_system_prompt(self.data.message) if self.model_config.auto_system_prompt else self.model_config.system_prompt
