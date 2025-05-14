@@ -1,11 +1,11 @@
-from event import DanmuEventHandler, WebUIEventHandler
-from queues import PretreatQueue
-from danmu import Danmu, DanmuHandler
+from core.event_handler import DanmuEventHandler, WebUIEventHandler
+from core.queues import PretreatQueue
+from core.danmu import DanmuClient, DanmuHandler
 from plugin import load_plugins
 from ui import WebUI
-from utils.logger import init_logger
-from resources import Resources
-from realtime_chat import RealtimeChat
+from infra.logger import init_logger
+from core.resources import Resources
+from core.realtime_chat import RealtimeChat
 import signal
 import logging
 import sys
@@ -24,7 +24,7 @@ class App:
         self.realtime_chat = RealtimeChat(self.queue)
         self.event_handler = DanmuEventHandler(self.queue, self.ui)
         self.danmu_handler = DanmuHandler(self.event_handler)
-        self.danmu = Danmu(self.danmu_handler, self.ui)
+        self.danmu = DanmuClient(self.danmu_handler, self.ui)
         self.web_ui_event_handler = WebUIEventHandler(self.ui, self.danmu, self.queue, self.realtime_chat)
         self.ui.action = self.web_ui_event_handler
         self.danmu.webui = self.ui

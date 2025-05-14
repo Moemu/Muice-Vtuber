@@ -1,6 +1,6 @@
-from blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage,RoomEnterMessage
+from services.blivedm.blivedm.models.open_live import DanmakuMessage,GiftMessage,SuperChatMessage,GuardBuyMessage,RoomEnterMessage
 from models import MessageData
-from resources import Resources
+from .resources import Resources
 from ui import WebUI
 from utils.utils import get_avatar_base64, message_precheck
 import tasks

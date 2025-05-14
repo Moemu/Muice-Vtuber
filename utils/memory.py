@@ -1,5 +1,5 @@
-from llm import Message
-from sqlite import Database
+from services.llm import Message
+from infra.database import Database
 
 async def generate_history(database:Database, prompt: str, user_id: str, user_only: bool = False) -> list[Message]:
     '''

@@ -1,8 +1,8 @@
-from models import BasicTTS
+from services.tts import BaseTTS
 from config import Config
-from llm import BasicModel
+from services.llm import BasicModel
 from utils.utils import Captions
-from sqlite import Database
+from infra.database import Database
 from config import get_model_config
 from typing import Type, Optional
 
@@ -13,7 +13,7 @@ def _load_model(model_config_types:str = "default") -> BasicModel:
     初始化模型类
     """
     model_config = get_model_config(model_config_types = model_config_types)
-    module_name = f"llm.{model_config.loader}"
+    module_name = f"services.llm.{model_config.loader}"
     module = importlib.import_module(module_name)
     ModelClass: Optional[Type[BasicModel]] = getattr(module, model_config.loader, None)
 
@@ -28,7 +28,7 @@ class Resources:
     """外部模块资源"""
     _instance: Optional["Resources"] = None
     
-    def __init__(self, config:Config, model:BasicModel, leisure_model:BasicModel, multimodal:BasicModel, tts:BasicTTS, captions:Captions, database:Database) -> None:
+    def __init__(self, config:Config, model:BasicModel, leisure_model:BasicModel, multimodal:BasicModel, tts:BaseTTS, captions:Captions, database:Database) -> None:
         self.config = config
         self.model = model
         self.leisure_model = leisure_model
@@ -41,7 +41,7 @@ class Resources:
     def init(cls):
         if cls._instance is None:
             config = Config()
-            tts_module = importlib.import_module("tts")
+            tts_module = importlib.import_module("services.tts")
             tts = getattr(tts_module, config.TTS_LOADER)(config.TTS_CONFIG)
 
             model = _load_model()

@@ -5,10 +5,10 @@ import keyboard
 import asyncio
 from config import Config
 from models import MessageData
-from resources import Resources
+from .resources import Resources
 from queues import PretreatQueue
 from tasks import DevMicrophoneTask
-from sqlite import Database
+from infra.database import Database
 from utils.audio_process import SpeechRecognitionPipeline
 import threading
 import pyaudio
@@ -95,7 +95,7 @@ class RealtimeChat:
     
     async def generate_reply(self):
         logger.info(f"已保存音频文件，开始语音处理")
-        message = await SpeechRecognitionPipeline().generate_speech("./temp/stt_output.wav") # 语音识别输出用户Prompt
+        message = await SpeechRecognitionPipeline().generate_speech("./temp/stt_output.wav")  # type:ignore
         if not message or len(message) < 2: return
         os.remove("./temp/stt_output.wav")
 

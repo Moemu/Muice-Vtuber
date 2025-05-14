@@ -1,6 +1,6 @@
-from models import BasicTask
 from typing import Tuple, List
 import tasks
+from tasks import BaseTask
 import random,asyncio
 from threading import Thread
 import logging
@@ -35,13 +35,13 @@ class PretreatQueue:
         self.idle_time = 0
         self.first_run = first_run
 
-    async def _queue_get(self) -> Tuple[float, BasicTask]:
+    async def _queue_get(self) -> Tuple[float, BaseTask]:
         return await self._queue.get()
     
-    async def _queue_put(self, priority:float, task: BasicTask):
+    async def _queue_put(self, priority:float, task: BaseTask):
         await self._queue.put((priority, task))
 
-    def _merge_tasks(self, queue_items:List[Tuple[float, BasicTask]]) -> List[Tuple[float, BasicTask]]:
+    def _merge_tasks(self, queue_items:List[Tuple[float, BaseTask]]) -> List[Tuple[float, BaseTask]]:
         """
         合并队列中来自相同用户的任务
 
@@ -50,7 +50,7 @@ class PretreatQueue:
         if len(queue_items) < 2:
             return queue_items
 
-        merged_tasks:List[Tuple[float, BasicTask]] = [queue_items[0]]
+        merged_tasks:List[Tuple[float, BaseTask]] = [queue_items[0]]
 
         for prioritiy, task in queue_items[1:]:
             last_priority, last_task = merged_tasks[-1]
@@ -65,12 +65,12 @@ class PretreatQueue:
 
         return merged_tasks
 
-    async def _process_queue(self) -> List[Tuple[float, BasicTask]]:
+    async def _process_queue(self) -> List[Tuple[float, BaseTask]]:
         """
         获取队列内容并过滤优先级超过阈值的任务
         """
         # current_time = time.time()
-        queue_items:List[Tuple[float, BasicTask]] = []
+        queue_items:List[Tuple[float, BaseTask]] = []
         
         while not self._queue.empty():
             priority, task = await self._queue_get()
@@ -157,7 +157,7 @@ class PretreatQueue:
         await self.post_queue.start_async()  # 改为 await 启动
         await self.__run()
 
-    async def put(self, priority: int, task: BasicTask):
+    async def put(self, priority: int, task: BaseTask):
         """入队方法"""
         if not self._queue.full():
             await self._queue_put(priority, task)
@@ -221,10 +221,10 @@ class PostProcessQueue:
         self.is_running = False
         self.is_task_running = False
 
-    async def _queue_get(self) -> Tuple[float, BasicTask]:
+    async def _queue_get(self) -> Tuple[float, BaseTask]:
         return await self._queue.get()
     
-    async def _queue_put(self, priority:float, task: BasicTask):
+    async def _queue_put(self, priority:float, task: BaseTask):
         await self._queue.put((priority, task))
     
     @property
@@ -250,7 +250,7 @@ class PostProcessQueue:
             
             self.is_task_running = False
 
-    async def put(self, priority: float, task:BasicTask):
+    async def put(self, priority: float, task:BaseTask):
         """入队方法"""        
         if self._queue.full():
             # 队列满时直接替换

@@ -1,7 +1,3 @@
-# import sys
-# import os
-# import asyncio
-# import shlex
 import pyaudio
 import aiohttp
 import base64
@@ -10,7 +6,7 @@ import threading
 import logging
 import pyautogui
 import re
-from captions.app import Captions as Captions_app
+from services.captions.app import Captions as Captions_app
 
 logger = logging.getLogger('Muice.Utils')
 

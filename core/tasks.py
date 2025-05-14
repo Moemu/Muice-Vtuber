@@ -1,14 +1,106 @@
-from models import BasicTask
+from abc import ABC, abstractmethod
+from functools import total_ordering
+from models import MessageData
 from utils.memory import generate_history
 from utils.utils import screenshot
-from llm.utils.auto_system_prompt import auto_system_prompt
-from typing import List, Type, Tuple
+from services.llm.utils.auto_system_prompt import auto_system_prompt
+from typing import List, Type, Tuple, Optional
+from plugin import get_tools
 import logging
 import random
+import time
 
 logger = logging.getLogger("Muice.task")
 
-class DanmuTask(BasicTask):
+@total_ordering
+class BaseTask(ABC):
+    '''基本任务'''
+    def __init__(self, data:Optional[MessageData] = None) -> None:
+        from .resources import Resources
+        self.resources = Resources.get()
+        """资源"""
+        self.tts = self.resources.tts
+        self.model = self.resources.model
+        self.captions = self.resources.captions
+        self.leisure_model = self.resources.leisure_model
+        self.database = self.resources.database
+        self.multimodal = self.resources.multimodal
+
+        self.model_config = self.resources.model.config
+        """模型配置"""
+        self.data = data or MessageData()
+        """消息内容"""
+        self.tools = get_tools() if self.model_config.function_call else []
+        """Function Calls 工具列表"""
+        self.time = time.time()
+        """事件创建时间"""
+        self.response: str = ""
+        """模型响应"""
+        self.tts_file: Optional[str] = None
+        """TTS输出文件路径"""
+        self.is_saved: bool = False
+        """是否已经保存到数据库或是不需要保存"""
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(time={self.time}, data={self.data})"
+
+    def __lt__(self, other: "BaseTask") -> bool:
+        return self.time < other.time
+    
+    def __eq__(self, other: "BaseTask") -> bool:
+        return id(self) == id(other)
+    
+    def __add__(self, other: "BaseTask") -> "BaseTask":
+        self.data += other.data
+        return self
+    
+    
+    # @staticmethod
+    # def message_filter(func):
+    #     @functools.wraps(func)
+    #     async def wrapper(self, *args, **kwargs):
+    #         if message_filiter(self.data.message):
+    #             return await func(self, *args, **kwargs)
+    #         logger.warning(f"{self.data.message} 在消息预检时被过滤")
+    #         await self.post_response(self, "(已过滤)。啊这...要不要我们换一个话题聊？qwq", False)
+    #     return wrapper
+
+    @abstractmethod
+    async def pretreatment(self) -> bool:
+        """
+        消息预处理（缓存队列）
+        """
+        pass
+
+    async def post_response(self):
+        """
+        在直播间输出结果
+        """
+        if self.tts_file is None:
+            logger.warning("不存在 tts 输出！该任务不执行")
+            return
+
+        if self.data.message:
+            await self.resources.captions.post(
+                self.data.message, 
+                self.data.username, 
+                self.data.userface, 
+                self.response
+            )
+        else:
+            await self.resources.captions.post(respond=self.response)
+
+        await self.resources.tts.play_audio(self.tts_file)
+
+        if not self.is_saved:
+            await self.resources.database.add_item(
+                self.data.username, 
+                self.data.userid, 
+                self.data.message, 
+                self.response
+            )
+
+class DanmuTask(BaseTask):
     '''弹幕任务'''
     # @BasicTask.message_filter
     async def pretreatment(self) -> bool:
@@ -28,7 +120,7 @@ class DanmuTask(BasicTask):
         logger.info(f'[{self.data.username}] 事件预处理结束')
         return True
 
-class GiftTask(BasicTask):
+class GiftTask(BaseTask):
     '''礼物任务'''
     async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}] 赠送了 {self.data.gift_name} x {self.data.gift_num} 总价值: {self.data.total_value}')
@@ -46,7 +138,7 @@ class GiftTask(BasicTask):
         logger.info(f'[{self.data.username}] 事件预处理结束')
         return True
 
-class SuperChatTask(BasicTask):
+class SuperChatTask(BaseTask):
     '''醒目留言任务'''
     async def pretreatment(self) -> bool:
         logger.info(f'[{self.data.username}] 赠送了 ¥{self.data.total_value} 醒目留言：{self.data.message}')
@@ -68,7 +160,7 @@ class SuperChatTask(BasicTask):
         logger.info(f'[{self.data.username}] 事件预处理结束')
         return True
 
-class BuyGuardTask(BasicTask):
+class BuyGuardTask(BaseTask):
     '''上舰任务'''
     async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 购买了大航海等级 {self.data.guard_level}')
@@ -85,7 +177,7 @@ class BuyGuardTask(BasicTask):
         logger.info(f'[{self.data.username}] 事件预处理结束')
         return True
 
-class LeisureTask(BasicTask):
+class LeisureTask(BaseTask):
     async def pretreatment(self) -> bool:
         # history = self.database.get_history()
         active_prompts = ['<生成推文: 胡思乱想>', '<生成推文: AI生活>', '<生成推文: AI思考>', '<生成推文: 表达爱意>', '<生成推文: 情感建议>']
@@ -103,7 +195,7 @@ class LeisureTask(BasicTask):
 
         return True
 
-class EnterRoomTask(BasicTask):
+class EnterRoomTask(BaseTask):
     async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 进入房间')
         self.response = f"欢迎 {self.data.username} 进入到直播间喵"
@@ -117,7 +209,7 @@ class EnterRoomTask(BasicTask):
 
         return True
 
-class RefreshTask(BasicTask):
+class RefreshTask(BaseTask):
     async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 请求刷新')
         history = await generate_history(self.database, self.data.message, self.data.userid, user_only=True)
@@ -141,7 +233,7 @@ class RefreshTask(BasicTask):
 
         return True
 
-class CleanMemoryTask(BasicTask):
+class CleanMemoryTask(BaseTask):
     async def pretreatment(self) -> bool:
         logger.info(f'{self.data.username} 请求清空对话历史')
         await self.database.unavailable_item(self.data.userid)
@@ -156,7 +248,7 @@ class CleanMemoryTask(BasicTask):
 
         return True
 
-class ReadScreenTask(BasicTask):
+class ReadScreenTask(BaseTask):
     async def pretreatment(self) -> bool:
         logger.info('[读屏任务] 开始读取屏幕')
         respond = '让我们看一下沐沐在干什么...'
@@ -175,7 +267,7 @@ class ReadScreenTask(BasicTask):
         logger.info(f'[读屏任务] 事件处理结束')
         return True
 
-class DevMicrophoneTask(BasicTask):
+class DevMicrophoneTask(BaseTask):
     async def pretreatment(self) -> bool:
         logger.info(f'[Dev] {self.data.message}')
 
@@ -195,10 +287,10 @@ class CommandTask:
     CommandTask类用于基于关键词注册和获取任务处理器。该类作为系统中命令任务的注册表，
     允许动态映射命令关键词和对应的任务处理类。
     """
-    _rules: List[Tuple[str, Type[BasicTask], int]] = []
+    _rules: List[Tuple[str, Type[BaseTask], int]] = []
 
     @classmethod
-    def register(cls, keyword: str, task_cls: Type[BasicTask], priority: int = 10) -> None:
+    def register(cls, keyword: str, task_cls: Type[BaseTask], priority: int = 10) -> None:
         """
         注册新的命令任务规则
         
@@ -209,7 +301,7 @@ class CommandTask:
         cls._rules.append((keyword, task_cls, priority))
 
     @classmethod
-    def get_task(cls, message:str) -> Tuple[Type[BasicTask], int]:
+    def get_task(cls, message:str) -> Tuple[Type[BaseTask], int]:
         """
         根据注册的规则为给定消息确定适当的任务类，若无匹配规则则返回默认任务
         """

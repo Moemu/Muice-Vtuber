@@ -1,49 +1,8 @@
-import edge_tts
-import logging
-import os
 import requests
-import time
+from ._base import BaseTTS
+# from utils.utils import filter_parentheses
 
-from pydub import AudioSegment
-from models import BasicTTS
-from utils.utils import filter_parentheses
-from typing import Optional
-from pathlib import Path
-
-logger = logging.getLogger('Muice.TTS')
-
-class EdgeTTS(BasicTTS):
-    def __init__(self, config:dict) -> None:
-        self.__VOICE = "zh-CN-XiaoyiNeural"
-        self.__OUTPUT_PATH = Path("./temp/tts")
-        self.text = None
-        self.result = True
-
-        self.__OUTPUT_PATH.mkdir(exist_ok=True)
-
-    async def generate_tts(self, text:str, proxy:str|None = 'http://127.0.0.1:7890') -> Optional[str]:
-        output_file = str(self.__OUTPUT_PATH / f"{time.time_ns()}.mp3")
-
-        try:
-            communicate = edge_tts.Communicate(text, self.__VOICE, proxy = proxy)
-            await communicate.save(output_file)
-        except Exception as e:
-            if proxy:
-                return await self.generate_tts(text, proxy = None)
-            logger.warning(f"尝试生成TTS语音文件时出现了问题: {e}")
-            return None
-
-        if os.stat(output_file).st_size == 0:
-            logger.warning("生成的TTS语音文件为空")
-            return None
-        
-        sound = AudioSegment.from_mp3(output_file)
-        sound.export(output_file.replace(".mp3", ".wav"), format="wav")
-        
-        return output_file.replace(".mp3", ".wav")
-    
-
-class GPTSoVITS(BasicTTS):
+class GPTSoVITS(BaseTTS):
     def __init__(self, config: dict):
         """
         初始化 TTS 类，配置服务器地址、端口和配置文件路径。
@@ -95,7 +54,7 @@ class GPTSoVITS(BasicTTS):
         
         # 准备POST请求的参数
         payload = {
-            "text": filter_parentheses(text),
+            "text": text,
             "text_lang": text_lang,
             "ref_audio_path": ref_audio_path,
             "prompt_text": prompt_text,

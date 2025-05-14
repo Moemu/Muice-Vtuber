@@ -2,7 +2,7 @@ import sys
 import yaml
 import os
 from typing import Optional
-from llm import ModelConfig  # Changed from relative to absolute import
+from services.llm import ModelConfig
 from pathlib import Path
 
 MODELS_CONFIG_PATH = Path("configs/models.yml").resolve()

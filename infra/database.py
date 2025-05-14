@@ -1,5 +1,5 @@
 import aiosqlite,os,time,asyncio
-from llm import Message
+from services.llm import Message
 from typing import Optional
 
 class Database:

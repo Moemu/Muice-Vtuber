@@ -1,6 +1,5 @@
-from sqlite import Database
+from infra.database import Database
 import json
-import asyncio
 
 START_ID = 1576
 END_ID = 3080

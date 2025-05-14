@@ -2,6 +2,7 @@ import logging
 import colorlog
 import time
 import os
+from typing import Optional
 
 def init_logger(console_handler_level = logging.INFO):
     # 创建logger对象
@@ -34,3 +35,7 @@ def init_logger(console_handler_level = logging.INFO):
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
     return logger
+
+def get_logger(name: Optional[str] = None):
+    logger = f"Muice.{name}" if name else "Muice"
+    return logging.getLogger(logger)
