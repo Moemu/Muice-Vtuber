@@ -1,4 +1,5 @@
-from event import DanmuEventHandler, WebUIEventHandler, PretreatQueue
+from event import DanmuEventHandler, WebUIEventHandler
+from queues import PretreatQueue
 from danmu import Danmu, DanmuHandler
 from plugin import load_plugins
 from ui import WebUI

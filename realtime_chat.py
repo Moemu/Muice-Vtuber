@@ -6,7 +6,7 @@ import asyncio
 from config import Config
 from models import MessageData
 from resources import Resources
-from event import PretreatQueue
+from queues import PretreatQueue
 from tasks import DevMicrophoneTask
 from sqlite import Database
 from utils.audio_process import SpeechRecognitionPipeline
