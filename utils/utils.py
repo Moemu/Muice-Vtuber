@@ -98,8 +98,13 @@ def message_precheck(message:str) -> bool:
     # 前缀检测
     return not (message.startswith('＃') or message.startswith('#'))
 
-def screenshot():
-    return pyautogui.screenshot('./temp/screenshot.png')
+def screenshot() -> str:
+    """
+    获取屏幕截图
+    """
+    save_path = './temp/screenshot.png'
+    pyautogui.screenshot('./temp/screenshot.png')
+    return save_path
 
 def filter_emotion(text: str) -> str:
     # 定义常见的标点符号
