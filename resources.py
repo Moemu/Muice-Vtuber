@@ -1,4 +1,4 @@
-from _types import BasicTTS
+from models import BasicTTS
 from config import Config
 from llm import BasicModel
 from utils.utils import Captions

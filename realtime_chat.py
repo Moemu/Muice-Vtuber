@@ -4,9 +4,10 @@ import os
 import keyboard
 import asyncio
 from config import Config
-from _types import MessageData
+from models import MessageData
 from resources import Resources
-from event import PretreatQueue, DevMicrophoneTask
+from event import PretreatQueue
+from tasks import DevMicrophoneTask
 from sqlite import Database
 from utils.audio_process import SpeechRecognitionPipeline
 import threading

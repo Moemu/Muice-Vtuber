@@ -1,9 +1,8 @@
-from event import DanmuEventHandler, WebUIEventHandler, PretreatQueue, LeisureTask
+from event import DanmuEventHandler, WebUIEventHandler, PretreatQueue
 from danmu import Danmu, DanmuHandler
 from plugin import load_plugins
 from ui import WebUI
 from utils.logger import init_logger
-from _types import *
 from resources import Resources
 from realtime_chat import RealtimeChat
 import signal
@@ -20,9 +19,7 @@ class App:
 
         self.resources = Resources.get()    
         self.ui = WebUI()
-        self.leisuretask = LeisureTask(MessageData(username="闲时任务"))
         self.queue = PretreatQueue()
-        self.queue.leisure_task = self.leisuretask
         self.realtime_chat = RealtimeChat(self.queue)
         self.event_handler = DanmuEventHandler(self.queue, self.ui)
         self.danmu_handler = DanmuHandler(self.event_handler)

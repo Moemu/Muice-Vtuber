@@ -5,7 +5,7 @@ import requests
 import time
 
 from pydub import AudioSegment
-from _types import BasicTTS
+from models import BasicTTS
 from utils.utils import filter_parentheses
 from typing import Optional
 from pathlib import Path

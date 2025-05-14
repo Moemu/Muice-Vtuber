@@ -86,7 +86,7 @@ class MessageData:
 @total_ordering
 class BasicTask(ABC):
     '''基本任务'''
-    def __init__(self, data:MessageData) -> None:
+    def __init__(self, data:MessageData = MessageData()) -> None:
         from resources import Resources
         self.resources = Resources.get()
         """资源"""
